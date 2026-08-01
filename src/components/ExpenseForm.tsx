@@ -233,7 +233,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
     setParsedSession({ ...parsedSession, items: updated });
   };
 
-  // Save Shopping Session to Firestore
+  // Save the shopping session to the application API.
   const handleSaveParsedSession = async () => {
     if (!parsedSession || isSavingSession) return;
 

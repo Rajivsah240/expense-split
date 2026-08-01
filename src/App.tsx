@@ -25,11 +25,13 @@ import {
   BarChart3,
   Receipt,
   AtSign,
-  Edit2
+  Edit2,
+  Mail,
+  KeyRound
 } from 'lucide-react';
 
 export default function App() {
-  const { user, loading: authLoading, login, logout, updateUsername } = useAuth();
+  const { user, loading: authLoading, requestOtp, verifyOtp, logout, updateUsername } = useAuth();
   const { teams, loading: teamsLoading, createTeam, addMemberToTeam, removeMemberFromTeam } = useTeams(user);
 
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
@@ -40,6 +42,11 @@ export default function App() {
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [showEditUsername, setShowEditUsername] = useState(false);
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const activeTeam = teams.find(t => t.id === activeTeamId) || null;
   const {
@@ -60,6 +67,33 @@ export default function App() {
   }
 
   if (!user) {
+    const handleRequestOtp = async (event: React.FormEvent) => {
+      event.preventDefault();
+      setIsSigningIn(true);
+      setSignInError(null);
+      try {
+        await requestOtp(email);
+        setOtpSent(true);
+      } catch (error: any) {
+        setSignInError(error.message || 'Could not send a sign-in code.');
+      } finally {
+        setIsSigningIn(false);
+      }
+    };
+
+    const handleVerifyOtp = async (event: React.FormEvent) => {
+      event.preventDefault();
+      setIsSigningIn(true);
+      setSignInError(null);
+      try {
+        await verifyOtp(email, otp);
+      } catch (error: any) {
+        setSignInError(error.message || 'Could not verify the sign-in code.');
+      } finally {
+        setIsSigningIn(false);
+      }
+    };
+
     return (
       <div className="min-h-screen bg-stone-50 flex justify-center items-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-200 max-w-sm w-full text-center">
@@ -67,13 +101,51 @@ export default function App() {
             <Calculator className="w-12 h-12 text-stone-800" />
           </div>
           <h1 className="text-2xl font-bold text-stone-900 mb-2">Expense Split</h1>
-          <p className="text-stone-500 mb-8">Sign in to manage shared shopping sessions and expenses.</p>
-          <button
-            onClick={login}
-            className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition-colors shadow-sm"
-          >
-            Sign in with Google
-          </button>
+          <p className="text-stone-500 mb-6">Sign in securely with a one-time code sent to your email.</p>
+          <form onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp} className="space-y-3 text-left">
+            <label className="text-xs font-bold text-stone-700 block">Email address</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="w-full pl-10 pr-3 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                required
+                disabled={otpSent || isSigningIn}
+              />
+            </div>
+            {otpSent && (
+              <>
+                <label className="text-xs font-bold text-stone-700 block pt-1">Six-digit code</label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={otp}
+                    onChange={event => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    className="w-full pl-10 pr-3 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-stone-400"
+                    required
+                  />
+                </div>
+                <button type="button" onClick={() => { setOtpSent(false); setOtp(''); setSignInError(null); }} className="text-xs text-stone-500 hover:text-stone-800">
+                  Use a different email
+                </button>
+              </>
+            )}
+            {signInError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{signInError}</p>}
+            <button
+              type="submit"
+              disabled={isSigningIn || !email || (otpSent && otp.length !== 6)}
+              className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition-colors shadow-sm disabled:opacity-50"
+            >
+              {isSigningIn ? 'Please wait...' : otpSent ? 'Verify & Sign In' : 'Send Sign-in Code'}
+            </button>
+          </form>
         </div>
       </div>
     );

@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { handleApi } from './server-lib/api';
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -18,7 +20,6 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // API routes FIRST
   app.post("/api/parse-expenses", async (req, res) => {
     try {
       const { text, imageBase64, imageMimeType, paidByUid, membersInfo } = req.body;
@@ -106,6 +107,12 @@ Rules:
       console.error('Error parsing expenses:', error);
       res.status(500).json({ error: 'Failed to parse expenses' });
     }
+  });
+
+  // All remaining API endpoints are served by the MongoDB-backed API handler.
+  app.all('/api/*', (req, res) => {
+    const pathParts = req.path.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+    return handleApi(req, res, pathParts);
   });
 
   // Vite middleware for development
