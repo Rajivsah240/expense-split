@@ -3,7 +3,7 @@
   "appId": "1:172614008555:web:f847f045f36fb7f23ec8ae",
   "apiKey": "AIzaSyCiUWA9KeBB6WFUDDySqW8p_qgh_SM1z98",
   "authDomain": "expense-split-eb3cb.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-flatmatesplit-4c24a2f0-2598-431a-81c0-540f30c8c38c",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "expense-split-eb3cb.firebasestorage.app",
   "messagingSenderId": "172614008555",
   "measurementId": "G-49K5NQNCF2",

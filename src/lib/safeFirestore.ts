@@ -1,45 +1,31 @@
 import { getDoc, getDocFromCache, DocumentReference, DocumentSnapshot } from 'firebase/firestore';
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+export function isOfflineError(error: unknown) {
+  const firebaseError = error as { code?: string; message?: string };
+  const message = firebaseError?.message?.toLowerCase() || '';
+  return (
+    firebaseError?.code === 'unavailable' ||
+    firebaseError?.code === 'failed-precondition' ||
+    message.includes('offline') ||
+    message.includes('network')
+  );
+}
 
-export async function safeGetDoc(docRef: DocumentReference, retries = 3): Promise<DocumentSnapshot> {
-  let lastError: any = null;
+/**
+ * Prefer Firestore's normal read, but fall back to its local cache immediately.
+ * Retrying here made a single failed read block sign-in and username updates for
+ * several seconds while the Firestore client was offline.
+ */
+export async function safeGetDoc(docRef: DocumentReference): Promise<DocumentSnapshot> {
+  try {
+    return await getDoc(docRef);
+  } catch (error) {
+    if (!isOfflineError(error)) throw error;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await getDoc(docRef);
-    } catch (err: any) {
-      lastError = err;
-      const isOffline = err?.message?.includes('offline') || err?.code === 'unavailable';
-
-      if (isOffline) {
-        // First try to check cache if available
-        try {
-          const cacheSnap = await getDocFromCache(docRef);
-          if (cacheSnap.exists()) {
-            return cacheSnap;
-          }
-        } catch {
-          // Cache miss, proceed to retry delay
-        }
-
-        if (attempt < retries) {
-          await delay(400 * Math.pow(1.5, attempt));
-          continue;
-        }
-      } else {
-        throw err;
-      }
+      return await getDocFromCache(docRef);
+    } catch {
+      throw error;
     }
   }
-
-  // Final cache attempt if network retries failed
-  try {
-    const cacheSnap = await getDocFromCache(docRef);
-    return cacheSnap;
-  } catch {
-    // Return original error if cache is also unavailable
-  }
-
-  throw lastError;
 }

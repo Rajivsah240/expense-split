@@ -20,14 +20,21 @@ export function useTeams(user: UserProfile | null) {
       where('memberIds', 'array-contains', user.uid)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const teamsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Team[];
-      setTeams(teamsData);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const teamsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Team[];
+        setTeams(teamsData);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('Could not load teams:', error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);

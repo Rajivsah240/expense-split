@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { safeGetDoc } from '../lib/safeFirestore';
+import { isOfflineError, safeGetDoc } from '../lib/safeFirestore';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, runTransaction, setDoc } from 'firebase/firestore';
 import { UserProfile } from '../types';
+
+const createBaseProfile = (firebaseUser: { uid: string; displayName: string | null; email: string | null; photoURL: string | null }): UserProfile => ({
+  uid: firebaseUser.uid,
+  displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown',
+  email: firebaseUser.email || '',
+  photoURL: firebaseUser.photoURL || undefined
+});
+
+const createUsernameBase = (profile: UserProfile) => {
+  const rawBase = profile.displayName
+    .toLowerCase()
+    .replace(/[^a-zA-Z0-9_]/g, '');
+  return rawBase.length >= 3 ? rawBase.slice(0, 15) : `user_${Math.floor(100 + Math.random() * 900)}`;
+};
 
 export function useAuth() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -12,20 +26,32 @@ export function useAuth() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Authentication is enough to enter the app. Profile reads happen in
+        // the background so an unavailable Firestore server cannot hold the
+        // user on the sign-in spinner.
+        const baseProfile = createBaseProfile(firebaseUser);
+        setUser(baseProfile);
+        setLoading(false);
+
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userSnap = await safeGetDoc(userDocRef);
 
-          let existingData = userSnap.exists() ? userSnap.data() : null;
-          let username = existingData?.username;
-          let usernameLower = existingData?.usernameLower;
+          const existingData = userSnap.exists() ? userSnap.data() : null;
+          let profile: UserProfile = {
+            ...baseProfile,
+            ...existingData,
+            uid: firebaseUser.uid,
+            displayName: existingData?.displayName || baseProfile.displayName,
+            email: existingData?.email || baseProfile.email,
+            photoURL: existingData?.photoURL || baseProfile.photoURL
+          };
+          let username = profile.username;
+          let usernameLower = profile.usernameLower || username?.toLowerCase();
 
           // If no username exists yet, generate a default unique username
           if (!username) {
-            const rawBase = (firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user')
-              .toLowerCase()
-              .replace(/[^a-zA-Z0-9_]/g, '');
-            const baseHandle = rawBase.length >= 3 ? rawBase.slice(0, 15) : `user_${Math.floor(100 + Math.random() * 900)}`;
+            const baseHandle = createUsernameBase(baseProfile);
 
             let candidate = baseHandle;
             let isAvailable = false;
@@ -34,9 +60,26 @@ export function useAuth() {
             while (!isAvailable && attempt < 10) {
               const testLower = candidate.toLowerCase();
               const unameRef = doc(db, 'usernames', testLower);
-              const unameSnap = await safeGetDoc(unameRef);
+              const candidateProfile: UserProfile = {
+                ...profile,
+                username: candidate,
+                usernameLower: testLower
+              };
 
-              if (!unameSnap.exists() || unameSnap.data()?.uid === firebaseUser.uid) {
+              // The username mapping and user profile must be written together.
+              // A transaction prevents two users from both claiming the same handle.
+              isAvailable = await runTransaction(db, async transaction => {
+                const unameSnap = await transaction.get(unameRef);
+                if (unameSnap.exists() && unameSnap.data()?.uid !== firebaseUser.uid) {
+                  return false;
+                }
+
+                transaction.set(unameRef, { uid: firebaseUser.uid, username: candidate });
+                transaction.set(userDocRef, candidateProfile, { merge: true });
+                return true;
+              });
+
+              if (isAvailable) {
                 isAvailable = true;
                 username = candidate;
                 usernameLower = testLower;
@@ -46,45 +89,24 @@ export function useAuth() {
               }
             }
 
-            if (username && usernameLower) {
-              try {
-                await setDoc(doc(db, 'usernames', usernameLower), {
-                  uid: firebaseUser.uid,
-                  username: username
-                });
-              } catch (e) {
-                console.warn("Could not write username record immediately:", e);
-              }
-            }
+            profile = { ...profile, username: username || '', usernameLower: usernameLower || '' };
           }
 
-          const userProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown',
-            username: username || '',
-            usernameLower: usernameLower || '',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || undefined
-          };
-
-          setUser(userProfile);
-          try {
-            await setDoc(userDocRef, userProfile, { merge: true });
-          } catch (e) {
-            console.warn("Could not update user doc in Firestore:", e);
-          }
+          profile = { ...profile, username: username || '', usernameLower: usernameLower || '' };
+          setUser(profile);
+          await setDoc(userDocRef, profile, { merge: true });
         } catch (e) {
-          console.error("Error loading user profile:", e);
-          setUser({
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown',
-            email: firebaseUser.email || ''
-          });
+          // This is expected when a user authenticates before Firestore has a
+          // connection. The base profile remains usable and a later reload or
+          // listener reconnect will hydrate it from the cache/server.
+          if (!isOfflineError(e)) {
+            console.warn('Could not load user profile:', e);
+          }
         }
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -136,46 +158,45 @@ export function useAuth() {
     }
 
     try {
-      // Check if username is taken by someone else using safeGetDoc
       const unameRef = doc(db, 'usernames', newLower);
-      const unameSnap = await safeGetDoc(unameRef);
+      const userRef = doc(db, 'users', user.uid);
 
-      if (unameSnap.exists() && unameSnap.data()?.uid !== user.uid) {
+      if (!navigator.onLine) {
+        return { success: false, error: 'You need an internet connection to check and save a username.' };
+      }
+
+      const result = await runTransaction(db, async transaction => {
+        const unameSnap = await transaction.get(unameRef);
+        if (unameSnap.exists() && unameSnap.data()?.uid !== user.uid) {
+          return { available: false };
+        }
+
+        const updatedProfile: UserProfile = {
+          ...user,
+          username: trimmed,
+          usernameLower: newLower
+        };
+
+        transaction.set(unameRef, { uid: user.uid, username: trimmed });
+        if (oldLower && oldLower !== newLower) {
+          transaction.delete(doc(db, 'usernames', oldLower));
+        }
+        transaction.set(userRef, updatedProfile, { merge: true });
+        return { available: true, updatedProfile };
+      });
+
+      if (!result.available) {
         return { success: false, error: `Username @${trimmed} is already taken by another user.` };
       }
 
-      // Reserve new username
-      await setDoc(unameRef, {
-        uid: user.uid,
-        username: trimmed
-      });
-
-      // Remove old username mapping if present
-      if (oldLower && oldLower !== newLower) {
-        try {
-          await deleteDoc(doc(db, 'usernames', oldLower));
-        } catch (err) {
-          console.warn("Could not delete old username record:", err);
-        }
-      }
-
-      // Update user document
-      const updatedProfile: UserProfile = {
-        ...user,
-        username: trimmed,
-        usernameLower: newLower
-      };
-
-      await setDoc(doc(db, 'users', user.uid), updatedProfile, { merge: true });
-      setUser(updatedProfile);
+      setUser(result.updatedProfile);
 
       return { success: true };
     } catch (err: any) {
-      console.error("Error updating username:", err);
-      const isOfflineErr = err?.message?.includes('offline') || err?.code === 'unavailable';
-      if (isOfflineErr) {
-        return { success: false, error: "Connection to server is taking a moment. Please check your internet and try again." };
+      if (isOfflineError(err)) {
+        return { success: false, error: 'Unable to reach the server. Please check your connection and try again.' };
       }
+      console.error("Error updating username:", err);
       return { success: false, error: err.message || "Failed to update username." };
     }
   };

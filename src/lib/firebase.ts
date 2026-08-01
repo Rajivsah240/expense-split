@@ -1,5 +1,9 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 let defaultConfig: Record<string, string> = {};
@@ -21,7 +25,21 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+// Firebase's default database is selected by omitting the database ID. Treat an
+// explicit "(default)" configuration the same way.
+const databaseId = firebaseConfig.firestoreDatabaseId === '(default)'
+  ? undefined
+  : firebaseConfig.firestoreDatabaseId || undefined;
+// Keep recently used data available on a reload when the network is slow or
+// temporarily unavailable. Multiple-tab persistence prevents one open tab from
+// disabling the cache for the others.
+export const db = initializeFirestore(
+  app,
+  {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  },
+  databaseId
+);
 export const auth = getAuth(app);
-
-

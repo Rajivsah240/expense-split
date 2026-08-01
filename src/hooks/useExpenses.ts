@@ -17,17 +17,24 @@ export function useExpenses(teamId: string | null) {
 
     const expensesRef = collection(db, 'teams', teamId, 'expenses');
     const q = query(expensesRef, orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const expenseData = snapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          ...data
-        } as Expense;
-      });
-      setExpenses(expenseData);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const expenseData = snapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            ...data
+          } as Expense;
+        });
+        setExpenses(expenseData);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('Could not load expenses:', error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [teamId]);
