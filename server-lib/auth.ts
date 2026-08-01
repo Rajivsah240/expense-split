@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
-import { connectToDatabase } from './database';
-import { Otp, User, UserRecord } from './models';
+import { connectToDatabase } from './database.js';
+import { Otp, User, UserRecord } from './models.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_MS = 60 * 1000;
@@ -35,14 +35,20 @@ function getMailer() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   if (!user || !pass) {
-    throw new Error('SMTP_USER and SMTP_PASS must be configured to send login codes.');
+    throw new Error('SMTP_USER and SMTP_PASS environment variables are missing on Vercel.');
   }
+
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
 
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: process.env.SMTP_SECURE !== 'false',
-    auth: { user, pass }
+    port,
+    secure,
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000
   });
 }
 

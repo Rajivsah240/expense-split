@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { getAuthenticatedUser } from "./auth";
+import { getAuthenticatedUser } from "./auth.js";
 
 export async function processParseExpenses(req: any, res: any) {
   try {

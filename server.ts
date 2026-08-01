@@ -12,8 +12,8 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { handleApi } from './server-lib/api';
-import { processParseExpenses } from './server-lib/parse-expenses';
+import { handleApi } from './server-lib/api.js';
+import { processParseExpenses } from './server-lib/parse-expenses.js';
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,

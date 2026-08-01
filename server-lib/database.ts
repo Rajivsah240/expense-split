@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
-// Ensure Node.js can resolve MongoDB Atlas SRV records even if local DNS times out
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch {
-  // Ignore fallback if custom DNS setup fails
+// Ensure Node.js can resolve MongoDB Atlas SRV records in local environments
+if (!process.env.VERCEL) {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  } catch {
+    // Ignore fallback if custom DNS setup fails
+  }
 }
 
 let connection: Promise<typeof mongoose> | undefined;

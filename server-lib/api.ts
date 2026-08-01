@@ -1,5 +1,5 @@
-import { getAuthenticatedUser, normalizeEmail, requestOtp, serializeUser, verifyOtp } from './auth';
-import { Expense, Team, User } from './models';
+import { getAuthenticatedUser, normalizeEmail, requestOtp, serializeUser, verifyOtp } from './auth.js';
+import { Expense, Team, User } from './models.js';
 
 type ApiRequest = { method?: string; headers: Record<string, string | string[] | undefined>; body?: any };
 type ApiResponse = { status(code: number): ApiResponse; json(value: unknown): unknown };
@@ -29,15 +29,20 @@ export async function handleApi(req: ApiRequest, res: ApiResponse, path: string[
     const method = (req.method || 'GET').toUpperCase();
     const route = path.join('/');
 
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch {}
+    }
+
     if (route === 'auth/request-otp' && method === 'POST') {
-      const email = normalizeEmail(req.body?.email);
+      const email = normalizeEmail(body?.email);
       if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Enter a valid email address.');
       await requestOtp(email);
       return res.status(200).json({ message: 'A sign-in code has been sent.' });
     }
     if (route === 'auth/verify-otp' && method === 'POST') {
-      const email = normalizeEmail(req.body?.email);
-      const otp = String(req.body?.otp || '').trim();
+      const email = normalizeEmail(body?.email);
+      const otp = String(body?.otp || '').trim();
       return res.status(200).json(await verifyOtp(email, otp));
     }
 
