@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from "@google/genai";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function parseExpenses(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -107,3 +107,5 @@ Rules:
     return res.status(500).json({ error: error.message || 'Failed to parse expenses' });
   }
 }
+
+export default parseExpenses;
