@@ -49,6 +49,15 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
 
+  const handleLogout = () => {
+    logout();
+    setOtpSent(false);
+    setOtp('');
+    setEmail('');
+    setSignInError(null);
+    setActiveTeamId(null);
+  };
+
   const activeTeam = teams.find(t => t.id === activeTeamId) || null;
   const {
     expenses,
@@ -203,7 +212,7 @@ export default function App() {
               </p>
             </div>
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="text-stone-500 hover:text-stone-800 p-2 rounded-full hover:bg-stone-200 transition-colors"
               title="Sign out"
             >
@@ -329,7 +338,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="text-stone-500 hover:text-stone-800 p-2 rounded-full hover:bg-stone-200 transition-colors"
               title="Sign out"
             >
