@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { UserProfile, SessionItem, ExpenseCategory } from '../types';
 import { CATEGORIES, categorizeItem } from '../utils/categories';
 import { parseExpensesHybrid } from '../utils/hybridParser';
@@ -20,6 +20,17 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+function parseLocalDate(dateStr: string): number {
+  if (!dateStr) return Date.now();
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return Date.now();
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  const date = new Date(year, month, day, 12, 0, 0);
+  return isNaN(date.getTime()) ? Date.now() : date.getTime();
+}
+
 interface ExpenseFormProps {
   onAddSession: (sessionData: {
     shopName?: string;
@@ -34,7 +45,7 @@ interface ExpenseFormProps {
 }
 
 export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseFormProps) {
-  const memberUids = Object.keys(membersInfo);
+  const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
 
   const [activeTab, setActiveTab] = useState<'quick' | 'text' | 'receipt'>('quick');
 
@@ -44,6 +55,10 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
   const [quickCategory, setQuickCategory] = useState<ExpenseCategory>('General');
   const [quickPaidBy, setQuickPaidBy] = useState(currentUser.uid);
   const [quickOwners, setQuickOwners] = useState<string[]>(memberUids);
+
+  useEffect(() => {
+    setQuickOwners(memberUids);
+  }, [memberUids]);
 
   // Text / Receipt mode input state
   const [inputText, setInputText] = useState('');
@@ -254,12 +269,12 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
 
     setIsSavingSession(true);
     try {
-      const parsedDate = new Date(parsedSession.sessionDate).getTime();
+      const parsedDate = parseLocalDate(parsedSession.sessionDate);
 
       await onAddSession({
         shopName: parsedSession.shopName.trim(),
         notes: parsedSession.notes.trim(),
-        sessionDate: isNaN(parsedDate) ? Date.now() : parsedDate,
+        sessionDate: parsedDate,
         paidBy: parsedSession.paidBy,
         createdBy: currentUser.uid,
         items: parsedSession.items

@@ -51,11 +51,38 @@ export function useExpenses(teamId: string | null) {
     await saveExpense({ ...sessionData, items, shares, totalAmount: items.reduce((total, item) => total + item.totalAmount, 0), type: 'session', createdAt: Date.now() });
   };
 
-  const updateSession = async (expenseId: string, sessionData: { shopName?: string; notes?: string; sessionDate?: number; paidBy?: string; items?: SessionItem[] }) => {
+  const updateSession = async (
+    expenseId: string, 
+    sessionData: { shopName?: string; notes?: string; sessionDate?: number; paidBy?: string; items?: SessionItem[] }
+  ) => {
     if (!teamId) return;
+    
+    let payload: Record<string, any> = { ...sessionData };
+    
+    if (sessionData.items && sessionData.items.length > 0) {
+      const items = sessionData.items.map(item => {
+        const share = Math.round((item.totalAmount / Math.max(1, item.owners.length)) * 100) / 100;
+        return { 
+          ...item, 
+          shares: Object.fromEntries(item.owners.map(owner => [owner, share])), 
+          category: item.category || categorizeItem(item.item) 
+        };
+      });
+      const shares: Record<string, number> = {};
+      items.forEach(item => Object.entries(item.shares).forEach(([memberId, amount]) => {
+        shares[memberId] = (shares[memberId] || 0) + amount;
+      }));
+      payload = {
+        ...payload,
+        items,
+        shares,
+        totalAmount: items.reduce((total, item) => total + item.totalAmount, 0)
+      };
+    }
+
     const { expense } = await api<{ expense: Expense }>(`teams/${teamId}/expenses/${expenseId}`, {
       method: 'PATCH',
-      body: JSON.stringify(sessionData)
+      body: JSON.stringify(payload)
     });
     setExpenses(current => current.map(item => item.id === expenseId ? expense : item));
   };

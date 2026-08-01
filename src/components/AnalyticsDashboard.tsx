@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Expense, UserProfile, ExpenseCategory } from '../types';
 import { CATEGORIES } from '../utils/categories';
 import { PieChart, TrendingUp, ShoppingBag, UserCheck, BarChart3, Calendar } from 'lucide-react';
-import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 
 interface AnalyticsDashboardProps {
   expenses: Expense[];
@@ -10,7 +10,7 @@ interface AnalyticsDashboardProps {
 }
 
 export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboardProps) {
-  const memberUids = Object.keys(membersInfo);
+  const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
   const [selectedMonth, setSelectedMonth] = useState<string>('all'); // 'all' or 'yyyy-MM'
 
   // Extract list of months available in expenses
@@ -167,11 +167,14 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
             className="bg-stone-50 border border-stone-200 text-stone-800 text-xs font-medium rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400"
           >
             <option value="all">All Time</option>
-            {availableMonths.map(m => (
-              <option key={m} value={m}>
-                {format(new Date(`${m}-01`), 'MMMM yyyy')}
-              </option>
-            ))}
+            {availableMonths.map(m => {
+              const [y, mo] = m.split('-').map(Number);
+              return (
+                <option key={m} value={m}>
+                  {format(new Date(y, mo - 1, 1), 'MMMM yyyy')}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>

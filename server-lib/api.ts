@@ -52,15 +52,32 @@ export async function handleApi(req: ApiRequest, res: ApiResponse, path: string[
     if (route === 'auth/username' && method === 'PATCH') {
       const username = String(req.body?.username || '').trim().replace(/^@/, '');
       if (!isUsername(username)) throw new Error('Username must be 3-20 letters, numbers, or underscores.');
-      currentUser.username = username;
-      currentUser.usernameLower = username.toLowerCase();
+      const update: Record<string, string> = {
+        username,
+        usernameLower: username.toLowerCase()
+      };
+      // Backfill displayName if it was never set, so the required field is always present.
+      if (!currentUser.displayName) {
+        update.displayName = currentUser.email?.split('@')[0] || 'User';
+      }
+      let updatedUser;
       try {
-        await currentUser.save();
+        updatedUser = await User.findByIdAndUpdate(
+          currentUserId,
+          { $set: update },
+          { new: true, runValidators: true }
+        );
       } catch (error: any) {
         if (error?.code === 11000) return res.status(409).json({ error: `Username @${username} is already taken.` });
         throw error;
       }
-      return res.status(200).json({ user: profile(currentUser) });
+      if (!updatedUser) throw new Error('Your account no longer exists.');
+      const userProfile = profile(updatedUser);
+      await Team.updateMany(
+        { memberIds: currentUserId },
+        { $set: { [`membersInfo.${currentUserId}`]: userProfile } }
+      );
+      return res.status(200).json({ user: userProfile });
     }
 
     if (route === 'teams' && method === 'GET') {

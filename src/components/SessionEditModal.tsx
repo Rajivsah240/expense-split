@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ShoppingSession, Expense, SessionItem, UserProfile, ExpenseCategory } from '../types';
 import { CATEGORIES, categorizeItem } from '../utils/categories';
 import { X, Plus, Trash2, Calendar, Store, User, FileText, Check, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
+
+function parseLocalDate(dateStr: string): number {
+  if (!dateStr) return Date.now();
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return Date.now();
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  const date = new Date(year, month, day, 12, 0, 0);
+  return isNaN(date.getTime()) ? Date.now() : date.getTime();
+}
 
 interface SessionEditModalProps {
   session: ShoppingSession | Expense;
@@ -21,7 +32,7 @@ interface SessionEditModalProps {
 }
 
 export function SessionEditModal({ session, membersInfo, onClose, onSave }: SessionEditModalProps) {
-  const memberUids = Object.keys(membersInfo);
+  const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
 
   const [shopName, setShopName] = useState(session.shopName || '');
   const [notes, setNotes] = useState(session.notes || '');
@@ -129,11 +140,11 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
 
     setIsSaving(true);
     try {
-      const parsedDate = new Date(sessionDate).getTime();
+      const parsedDate = parseLocalDate(sessionDate);
       await onSave(session.id, {
         shopName: shopName.trim(),
         notes: notes.trim(),
-        sessionDate: isNaN(parsedDate) ? Date.now() : parsedDate,
+        sessionDate: parsedDate,
         paidBy,
         items
       });

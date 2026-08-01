@@ -34,6 +34,16 @@ interface ExpenseListProps {
   membersInfo: Record<string, UserProfile>;
 }
 
+function safeFormatDate(ts: any): string {
+  try {
+    const num = Number(ts);
+    if (!isNaN(num) && num > 0) return format(num, 'MMMM d yyyy').toLowerCase();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 export function ExpenseList({
   expenses,
   onRemove,
@@ -41,7 +51,7 @@ export function ExpenseList({
   currentUser,
   membersInfo
 }: ExpenseListProps) {
-  const memberUids = Object.keys(membersInfo);
+  const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,7 +98,7 @@ export function ExpenseList({
 
       const payerName = (membersInfo[exp.paidBy]?.displayName || '').toLowerCase();
       const shopName = (exp.shopName || '').toLowerCase();
-      const sessionDateStr = format(exp.sessionDate || exp.createdAt || Date.now(), 'MMMM d yyyy').toLowerCase();
+      const sessionDateStr = safeFormatDate(exp.sessionDate || exp.createdAt);
 
       if (payerName.includes(term) || shopName.includes(term) || sessionDateStr.includes(term)) {
         return true;
@@ -244,7 +254,11 @@ export function ExpenseList({
                   <span className="font-bold text-lg text-emerald-700">₹{exp.totalAmount.toFixed(2)}</span>
                   {(exp.paidBy === currentUser.uid || exp.createdBy === currentUser.uid) && (
                     <button
-                      onClick={() => onRemove(exp.id)}
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to delete this settlement?')) {
+                          onRemove(exp.id);
+                        }
+                      }}
                       className="p-1.5 text-stone-400 hover:text-red-500 rounded-lg transition-colors"
                       title="Delete Settlement"
                     >
@@ -270,7 +284,7 @@ export function ExpenseList({
                 }
               ];
 
-          const title = exp.shopName || (items.length === 1 ? items[0].item : `${items.length} Items Shopping`);
+          const title = items.length === 1 ? items[0].item : `${items.length} Items Shopping`;
 
           return (
             <div
@@ -332,7 +346,11 @@ export function ExpenseList({
                   </button>
 
                   <button
-                    onClick={() => onRemove(exp.id)}
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to delete this shopping session?')) {
+                        onRemove(exp.id);
+                      }
+                    }}
                     className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-stone-100 rounded-lg transition-colors"
                     title="Delete Session"
                   >

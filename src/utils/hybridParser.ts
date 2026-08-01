@@ -1,4 +1,5 @@
 import { UserProfile, SessionItem, ExpenseCategory } from '../types';
+import { api } from '../lib/api';
 import { parseTextWithRules } from './ruleParser';
 import { categorizeItem } from './categories';
 
@@ -38,9 +39,8 @@ export async function parseExpensesHybrid(options: HybridParseOptions): Promise<
 
   // 2. Fallback to AI Parser Endpoint for receipts, images, or low-confidence / complex texts
   try {
-    const response = await fetch('/api/parse-expenses', {
+    const data = await api<any>('parse-expenses', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
         imageBase64,
@@ -49,12 +49,6 @@ export async function parseExpensesHybrid(options: HybridParseOptions): Promise<
         membersInfo
       })
     });
-
-    if (!response.ok) {
-      throw new Error('AI parse request failed');
-    }
-
-    const data = await response.json();
     const rawItems = data.items || [];
     let hasAmbiguous = false;
 

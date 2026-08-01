@@ -14,7 +14,7 @@ export function BalanceSummary({ expenses, onSettle, currentUser, membersInfo }:
   const [settling, setSettling] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const memberUids = Object.keys(membersInfo);
+  const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
 
   const { balances, settlements, pastSettlements } = useMemo(() => {
     // 1. Calculate net balances

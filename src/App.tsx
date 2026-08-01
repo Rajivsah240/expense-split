@@ -27,7 +27,8 @@ import {
   AtSign,
   Edit2,
   Mail,
-  KeyRound
+  KeyRound,
+  User
 } from 'lucide-react';
 
 export default function App() {
@@ -323,7 +324,7 @@ export default function App() {
               className="text-stone-600 hover:text-stone-900 px-3 py-1.5 text-xs font-semibold border border-stone-200 bg-white rounded-xl shadow-sm flex items-center gap-1.5 transition-colors"
               title="Edit Username"
             >
-              <AtSign className="w-3.5 h-3.5" />
+              <User className="w-3.5 h-3.5 text-stone-500" />
               @{user.username || 'username'}
             </button>
 
