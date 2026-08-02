@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ShoppingSession, Expense, SessionItem, UserProfile, ExpenseCategory } from '../types';
-import { CATEGORIES, categorizeItem } from '../utils/categories';
+import { CATEGORIES, CATEGORY_ICONS, categorizeItem } from '../utils/categories';
+import { motion } from 'motion/react';
 import { X, Plus, Trash2, Calendar, Store, User, FileText, Check, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -73,7 +74,7 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
         totalAmount: 0,
         owners: [...memberUids],
         shares: {},
-        category: 'General'
+        category: 'Miscellaneous'
       }
     ]);
   };
@@ -160,17 +161,23 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
   const grandTotal = items.reduce((sum, i) => sum + (Number(i.totalAmount) || 0), 0);
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-stone-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="glass-card w-full max-w-3xl rounded-3xl overflow-hidden my-8 max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="bg-stone-900 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+        <div className="bg-gradient-brand p-5 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-lg font-bold">Edit Shopping Session</h2>
-            <p className="text-xs text-stone-400">Update items, prices, owners, or buyer</p>
+            <h2 className="text-lg font-bold text-white">Edit Shopping Session</h2>
+            <p className="text-xs text-white/60">Update items, prices, owners, or buyer</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-stone-800 transition-colors"
+            className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -178,11 +185,11 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           {/* Scrollable Form Body */}
-          <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+          <div className="p-5 overflow-y-auto space-y-6 flex-1">
             {/* Session Metadata Controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 glass-light p-4 rounded-xl">
               <div>
-                <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
                   <Store className="w-3.5 h-3.5" /> Shop / Store Name
                 </label>
                 <input
@@ -190,18 +197,18 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                   value={shopName}
                   onChange={e => setShopName(e.target.value)}
                   placeholder="e.g. Reliance Fresh"
-                  className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                  className="input-dark w-full px-3 py-1.5 text-sm"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
                   <User className="w-3.5 h-3.5" /> Paid By
                 </label>
                 <select
                   value={paidBy}
                   onChange={e => setPaidBy(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 font-medium"
+                  className="input-dark w-full px-3 py-1.5 text-sm font-medium"
                 >
                   {memberUids.map(uid => (
                     <option key={uid} value={uid}>
@@ -212,14 +219,14 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" /> Session Date
                 </label>
                 <input
                   type="date"
                   value={sessionDate}
                   onChange={e => setSessionDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                  className="input-dark w-full px-3 py-1.5 text-sm"
                 />
               </div>
             </div>
@@ -227,11 +234,11 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
             {/* Items Table */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-stone-800">Items ({items.length})</h3>
+                <h3 className="text-sm font-bold text-white">Items ({items.length})</h3>
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="text-xs bg-stone-800 hover:bg-stone-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1"
+                  className="btn-primary px-3 py-1.5 text-xs font-medium flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add Item
                 </button>
@@ -241,8 +248,8 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                 {items.map((item, idx) => (
                   <div
                     key={item.id || idx}
-                    className={`bg-white border rounded-xl p-3 shadow-sm flex flex-col gap-3 ${
-                      item.isAmbiguous ? 'border-amber-300 bg-amber-50/20' : 'border-stone-200'
+                    className={`glass-light rounded-xl p-3 flex flex-col gap-3 ${
+                      item.isAmbiguous ? 'border-accent-amber/30 bg-accent-amber/5' : ''
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
@@ -251,30 +258,30 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                         value={item.item}
                         onChange={e => handleItemChange(idx, 'item', e.target.value)}
                         placeholder="Item name"
-                        className="flex-1 font-medium text-sm px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400"
+                        className="input-dark flex-1 font-medium text-sm px-2.5 py-1.5"
                       />
 
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <div className="relative flex-1 sm:w-28">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs">₹</span>
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-300/40 text-xs">₹</span>
                           <input
                             type="number"
                             step="0.01"
                             value={item.totalAmount || ''}
                             onChange={e => handleItemChange(idx, 'totalAmount', parseFloat(e.target.value) || 0)}
                             placeholder="Price"
-                            className="w-full pl-6 pr-2 py-1.5 text-sm font-semibold border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400"
+                            className="input-dark w-full pl-6 pr-2 py-1.5 text-sm font-semibold"
                           />
                         </div>
 
                         <select
                           value={item.category}
                           onChange={e => handleItemChange(idx, 'category', e.target.value as ExpenseCategory)}
-                          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-stone-50 font-medium"
+                          className="input-dark text-xs px-2 py-1.5 font-medium"
                         >
                           {CATEGORIES.map(cat => (
                             <option key={cat} value={cat}>
-                              {cat}
+                              {CATEGORY_ICONS[cat]} {cat}
                             </option>
                           ))}
                         </select>
@@ -282,7 +289,7 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(idx)}
-                          className="p-1.5 text-stone-400 hover:text-red-500 rounded-lg hover:bg-stone-100 transition-colors"
+                          className="p-1.5 text-brand-300/30 hover:text-accent-red rounded-lg hover:bg-white/5 transition-colors"
                           title="Delete Item"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -291,8 +298,8 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                     </div>
 
                     {/* Owner Pills */}
-                    <div className="flex items-center gap-2 flex-wrap text-xs pt-1 border-t border-stone-100">
-                      <span className="text-stone-400 font-medium">Owners:</span>
+                    <div className="flex items-center gap-2 flex-wrap text-xs pt-1.5 border-t border-white/5">
+                      <span className="text-brand-300/40 font-medium">Owners:</span>
                       {memberUids.map(uid => {
                         const isOwner = item.owners.includes(uid);
                         return (
@@ -300,13 +307,13 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                             key={uid}
                             type="button"
                             onClick={() => toggleOwner(idx, uid)}
-                            className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors flex items-center gap-1 ${
+                            className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-all flex items-center gap-1 ${
                               isOwner
-                                ? 'bg-stone-800 text-white border-stone-800'
-                                : 'bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100'
+                                ? 'bg-brand-600/30 text-brand-200 border-brand-500/30'
+                                : 'bg-white/5 text-brand-300/40 border-white/5 hover:border-white/15'
                             }`}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${isOwner ? 'bg-emerald-400' : 'bg-stone-300'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${isOwner ? 'bg-accent-green' : 'bg-white/20'}`} />
                             {membersInfo[uid]?.displayName || 'Member'}
                           </button>
                         );
@@ -319,7 +326,7 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
 
             {/* Notes */}
             <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
+              <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
                 <FileText className="w-3.5 h-3.5" /> Notes (Optional)
               </label>
               <input
@@ -327,30 +334,30 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="e.g. Grocery list for weekend party"
-                className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+                className="input-dark w-full px-3 py-1.5 text-sm"
               />
             </div>
           </div>
 
           {/* Footer Bar */}
-          <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between shrink-0">
+          <div className="p-4 bg-surface-50/80 border-t border-white/5 flex items-center justify-between shrink-0">
             <div>
-              <span className="text-xs text-stone-500 block">Session Total</span>
-              <span className="text-lg font-bold text-stone-900">₹{grandTotal.toFixed(2)}</span>
+              <span className="text-xs text-brand-300/50 block">Session Total</span>
+              <span className="text-lg font-bold text-white">₹{grandTotal.toFixed(2)}</span>
             </div>
 
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 border border-stone-200 text-stone-600 hover:bg-stone-100 font-medium rounded-xl text-sm transition-colors"
+                className="btn-ghost px-4 py-2 rounded-xl text-sm font-medium"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white font-medium rounded-xl text-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                className="btn-primary px-5 py-2 text-sm font-medium flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 {isSaving ? 'Saving...' : 'Save Changes'}
@@ -358,7 +365,7 @@ export function SessionEditModal({ session, membersInfo, onClose, onSave }: Sess
             </div>
           </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

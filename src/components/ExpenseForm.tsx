@@ -1,10 +1,10 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { UserProfile, SessionItem, ExpenseCategory } from '../types';
-import { CATEGORIES, categorizeItem } from '../utils/categories';
+import { CATEGORIES, CATEGORY_ICONS, categorizeItem } from '../utils/categories';
 import { parseExpensesHybrid } from '../utils/hybridParser';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
-  ListPlus,
   TextSelect,
   Image as ImageIcon,
   Camera,
@@ -16,7 +16,7 @@ import {
   Check,
   Sparkles,
   Trash2,
-  FileText
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -52,7 +52,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
   // Quick mode state
   const [quickItem, setQuickItem] = useState('');
   const [quickPrice, setQuickPrice] = useState('');
-  const [quickCategory, setQuickCategory] = useState<ExpenseCategory>('General');
+  const [quickCategory, setQuickCategory] = useState<ExpenseCategory>('Miscellaneous');
   const [quickPaidBy, setQuickPaidBy] = useState(currentUser.uid);
   const [quickOwners, setQuickOwners] = useState<string[]>(memberUids);
 
@@ -110,7 +110,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
       // Reset
       setQuickItem('');
       setQuickPrice('');
-      setQuickCategory('General');
+      setQuickCategory('Miscellaneous');
       setQuickOwners(memberUids);
     } catch (err) {
       console.error(err);
@@ -232,7 +232,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
           totalAmount: 0,
           owners: [...memberUids],
           shares: {},
-          category: 'General'
+          category: 'Miscellaneous'
         }
       ]
     });
@@ -297,20 +297,17 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
     : 0;
 
   return (
-    <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4">
+    <div className="glass-card rounded-2xl p-5 space-y-4">
       {/* Header Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-        <h2 className="font-semibold text-stone-800 text-lg">Add Shopping Session</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+        <h2 className="font-bold text-white text-lg">Add Shopping Session</h2>
 
-        <div className="flex bg-stone-100 p-1 rounded-xl">
+        <div className="flex glass-light p-1 rounded-xl">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('quick');
-              setParsedSession(null);
-            }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-              activeTab === 'quick' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+            onClick={() => { setActiveTab('quick'); setParsedSession(null); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'quick' ? 'bg-gradient-brand text-white shadow-md' : 'text-brand-300/60 hover:text-white'
             }`}
           >
             <Plus className="w-3.5 h-3.5" /> Quick Add
@@ -318,12 +315,9 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('text');
-              setParsedSession(null);
-            }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-              activeTab === 'text' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+            onClick={() => { setActiveTab('text'); setParsedSession(null); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'text' ? 'bg-gradient-brand text-white shadow-md' : 'text-brand-300/60 hover:text-white'
             }`}
           >
             <TextSelect className="w-3.5 h-3.5" /> WhatsApp / Text
@@ -331,15 +325,12 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('receipt');
-              setParsedSession(null);
-            }}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-              activeTab === 'receipt' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+            onClick={() => { setActiveTab('receipt'); setParsedSession(null); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'receipt' ? 'bg-gradient-brand text-white shadow-md' : 'text-brand-300/60 hover:text-white'
             }`}
           >
-            <Camera className="w-3.5 h-3.5" /> Receipt Scan
+            <Camera className="w-3.5 h-3.5" /> Receipt
           </button>
         </div>
       </div>
@@ -349,7 +340,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
         <form onSubmit={handleQuickSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1 sm:col-span-1">
-              <label className="text-xs font-semibold text-stone-600 block">Item Name</label>
+              <label className="text-xs font-semibold text-brand-200/70 block pl-0.5">Item Name</label>
               <input
                 type="text"
                 value={quickItem}
@@ -358,13 +349,13 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                   setQuickCategory(categorizeItem(e.target.value));
                 }}
                 placeholder="e.g. Milk & Eggs"
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 focus:bg-white"
+                className="input-dark w-full px-3.5 py-2.5 text-sm"
                 required
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-stone-600 block">Price (₹)</label>
+              <label className="text-xs font-semibold text-brand-200/70 block pl-0.5">Price (₹)</label>
               <input
                 type="number"
                 step="0.01"
@@ -372,21 +363,21 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                 value={quickPrice}
                 onChange={e => setQuickPrice(e.target.value)}
                 placeholder="180.00"
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stone-400 focus:bg-white"
+                className="input-dark w-full px-3.5 py-2.5 text-sm font-semibold"
                 required
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-stone-600 block">Category</label>
+              <label className="text-xs font-semibold text-brand-200/70 block pl-0.5">Category</label>
               <select
                 value={quickCategory}
                 onChange={e => setQuickCategory(e.target.value as ExpenseCategory)}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 font-medium"
+                className="input-dark w-full px-3.5 py-2.5 text-sm font-medium"
               >
                 {CATEGORIES.map(c => (
                   <option key={c} value={c}>
-                    {c}
+                    {CATEGORY_ICONS[c]} {c}
                   </option>
                 ))}
               </select>
@@ -395,11 +386,11 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1">Who Paid?</label>
+              <label className="text-xs font-semibold text-brand-200/70 block mb-1.5 pl-0.5">Who Paid?</label>
               <select
                 value={quickPaidBy}
                 onChange={e => setQuickPaidBy(e.target.value)}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 font-medium"
+                className="input-dark w-full px-3.5 py-2.5 text-sm font-medium"
               >
                 {memberUids.map(uid => (
                   <option key={uid} value={uid}>
@@ -410,7 +401,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1">Split Among</label>
+              <label className="text-xs font-semibold text-brand-200/70 block mb-1.5 pl-0.5">Split Among</label>
               <div className="flex gap-1.5 flex-wrap">
                 {memberUids.map(uid => {
                   const isOwner = quickOwners.includes(uid);
@@ -423,13 +414,13 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                           isOwner ? prev.filter(u => u !== uid) : [...prev, uid]
                         )
                       }
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 ${
                         isOwner
-                          ? 'bg-stone-800 text-white border-stone-800'
-                          : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'
+                          ? 'bg-gradient-brand text-white border-brand-500/30 shadow-md shadow-brand-500/10'
+                          : 'glass-light text-brand-300/60 border-white/5 hover:border-white/15'
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-full ${isOwner ? 'bg-emerald-400' : 'bg-stone-300'}`} />
+                      <span className={`w-2 h-2 rounded-full ${isOwner ? 'bg-accent-green' : 'bg-white/20'}`} />
                       {membersInfo[uid]?.displayName || 'User'}
                     </button>
                   );
@@ -441,7 +432,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
           <button
             type="submit"
             disabled={isSavingSession || !quickItem || !quickPrice || quickOwners.length === 0}
-            className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" />
             {isSavingSession ? 'Saving...' : 'Save Quick Expense'}
@@ -454,7 +445,7 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
         <form onSubmit={handleParse} className="space-y-4">
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-xs">
-              <label className="font-semibold text-stone-700">Paste WhatsApp List</label>
+              <label className="font-semibold text-brand-200/70 pl-0.5">Paste WhatsApp List</label>
               <button
                 type="button"
                 onClick={() =>
@@ -462,9 +453,9 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                     `Reliance Fresh\nVegetables - 130/3\nMilk - 100/3\nChicken - 420 AR\nPaneer - 180 A,R\nSoap - 40 (B)\nJuice - 20 Ashutosh`
                   )
                 }
-                className="text-stone-500 hover:text-stone-800 flex items-center gap-1 bg-stone-100 px-2.5 py-1 rounded-md text-[11px]"
+                className="btn-ghost px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1"
               >
-                <Sparkles className="w-3 h-3 text-amber-500" /> Fill Example
+                <Sparkles className="w-3 h-3 text-accent-amber" /> Fill Example
               </button>
             </div>
 
@@ -473,21 +464,24 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
               onChange={e => setInputText(e.target.value)}
               placeholder={`Vegetables - 130/3\nMilk - 100/3\nChicken - 420 AR\nPaneer - 180 A,R\nSoap - 40 (B)`}
               rows={5}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-400 text-sm font-mono"
+              className="input-dark w-full px-3.5 py-3 text-sm font-mono resize-none"
             />
 
-            <p className="text-[11px] text-stone-500">
-              Supports: initials (<code>A</code>, <code>R</code>, <code>B</code>), combinations (<code>AR</code>, <code>A,R</code>), <code>/3</code>, <code>all</code>, <code>me</code>, <code>(B)</code>.
+            <p className="text-[11px] text-brand-300/40 pl-0.5">
+              Supports: initials (<code className="text-brand-300/60">A</code>, <code className="text-brand-300/60">R</code>, <code className="text-brand-300/60">B</code>), combos (<code className="text-brand-300/60">AR</code>, <code className="text-brand-300/60">A,R</code>), <code className="text-brand-300/60">/3</code>, <code className="text-brand-300/60">all</code>, <code className="text-brand-300/60">me</code>, <code className="text-brand-300/60">(B)</code>.
             </p>
           </div>
 
           <button
             type="submit"
             disabled={isParsing || !inputText.trim()}
-            className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            {isParsing ? 'Parsing with Smart Engine...' : 'Parse & Preview Session'}
+            {isParsing ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Parsing with Smart Engine...</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Parse & Preview Session</>
+            )}
           </button>
         </form>
       )}
@@ -496,15 +490,15 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
       {activeTab === 'receipt' && !parsedSession && (
         <form onSubmit={handleParse} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-stone-700 block">Upload or Capture Receipt Photo</label>
+            <label className="text-xs font-semibold text-brand-200/70 block pl-0.5">Upload or Capture Receipt Photo</label>
 
             {imagePreview ? (
               <div className="relative inline-block">
-                <img src={imagePreview} alt="Receipt preview" className="h-44 rounded-xl border border-stone-200 object-cover shadow-sm" />
+                <img src={imagePreview} alt="Receipt preview" className="h-44 rounded-xl border border-white/10 object-cover shadow-lg" />
                 <button
                   type="button"
                   onClick={removeImage}
-                  className="absolute -top-2 -right-2 bg-white text-stone-500 hover:text-red-500 rounded-full p-1 border border-stone-200 shadow"
+                  className="absolute -top-2 -right-2 bg-surface-100 text-brand-300/60 hover:text-accent-red rounded-full p-1 border border-white/10 shadow-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -521,9 +515,9 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                 />
                 <label
                   htmlFor="receipt-file-input"
-                  className="p-4 border-2 border-dashed border-stone-200 hover:border-stone-400 rounded-xl cursor-pointer flex flex-col items-center justify-center gap-2 text-stone-600 hover:bg-stone-50 transition-colors"
+                  className="p-6 border-2 border-dashed border-white/10 hover:border-brand-500/30 rounded-xl cursor-pointer flex flex-col items-center justify-center gap-2 text-brand-300/60 hover:text-white transition-all hover:bg-white/5"
                 >
-                  <ImageIcon className="w-6 h-6 text-stone-400" />
+                  <ImageIcon className="w-6 h-6" />
                   <span className="text-xs font-medium">Upload Receipt Image</span>
                 </label>
 
@@ -538,9 +532,9 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
                 />
                 <label
                   htmlFor="receipt-camera-input"
-                  className="p-4 border-2 border-dashed border-stone-200 hover:border-stone-400 rounded-xl cursor-pointer flex flex-col items-center justify-center gap-2 text-stone-600 hover:bg-stone-50 transition-colors"
+                  className="p-6 border-2 border-dashed border-white/10 hover:border-brand-500/30 rounded-xl cursor-pointer flex flex-col items-center justify-center gap-2 text-brand-300/60 hover:text-white transition-all hover:bg-white/5"
                 >
-                  <Camera className="w-6 h-6 text-stone-400" />
+                  <Camera className="w-6 h-6" />
                   <span className="text-xs font-medium">Take Photo with Camera</span>
                 </label>
               </div>
@@ -550,187 +544,198 @@ export function ExpenseForm({ onAddSession, currentUser, membersInfo }: ExpenseF
           <button
             type="submit"
             disabled={isParsing || !imagePreview}
-            className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            {isParsing ? 'Scanning Receipt with AI OCR...' : 'Scan Receipt & Preview'}
+            {isParsing ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Scanning Receipt with AI OCR...</>
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Scan Receipt & Preview</>
+            )}
           </button>
         </form>
       )}
 
       {/* PARSED SHOPPING SESSION INTERACTIVE PREVIEW TABLE */}
-      {parsedSession && (
-        <div className="space-y-5 pt-2">
-          {/* Ambiguity Alert Banner */}
-          {parsedSession.hasAmbiguous && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3.5 rounded-xl text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+      <AnimatePresence>
+        {parsedSession && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-5 pt-2"
+          >
+            {/* Ambiguity Alert Banner */}
+            {parsedSession.hasAmbiguous && (
+              <div className="bg-accent-amber/10 border border-accent-amber/20 text-accent-amber p-3.5 rounded-xl text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <div>
+                  <span className="font-bold">Ambiguous Owners Detected!</span> Please verify and select the correct owners for highlighted items before saving.
+                </div>
+              </div>
+            )}
+
+            {/* Session Header Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 glass-light p-4 rounded-xl">
               <div>
-                <span className="font-bold">Ambiguous Owners Detected!</span> Please verify and select the correct owners for highlighted items before saving.
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
+                  <Store className="w-3.5 h-3.5" /> Shop / Store Name
+                </label>
+                <input
+                  type="text"
+                  value={parsedSession.shopName}
+                  onChange={e => setParsedSession({ ...parsedSession, shopName: e.target.value })}
+                  placeholder="e.g. Reliance Fresh"
+                  className="input-dark w-full px-3 py-1.5 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" /> Paid By
+                </label>
+                <select
+                  value={parsedSession.paidBy}
+                  onChange={e => setParsedSession({ ...parsedSession, paidBy: e.target.value })}
+                  className="input-dark w-full px-3 py-1.5 text-xs font-medium"
+                >
+                  {memberUids.map(uid => (
+                    <option key={uid} value={uid}>
+                      {membersInfo[uid]?.displayName || 'Unknown'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-brand-200/70 block mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" /> Date
+                </label>
+                <input
+                  type="date"
+                  value={parsedSession.sessionDate}
+                  onChange={e => setParsedSession({ ...parsedSession, sessionDate: e.target.value })}
+                  className="input-dark w-full px-3 py-1.5 text-xs"
+                />
               </div>
             </div>
-          )}
 
-          {/* Session Header Fields */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 p-3.5 rounded-xl border border-stone-200">
-            <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
-                <Store className="w-3.5 h-3.5" /> Shop / Store Name
-              </label>
-              <input
-                type="text"
-                value={parsedSession.shopName}
-                onChange={e => setParsedSession({ ...parsedSession, shopName: e.target.value })}
-                placeholder="e.g. Reliance Fresh"
-                className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-stone-400"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
-                <User className="w-3.5 h-3.5" /> Paid By
-              </label>
-              <select
-                value={parsedSession.paidBy}
-                onChange={e => setParsedSession({ ...parsedSession, paidBy: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-stone-400"
-              >
-                {memberUids.map(uid => (
-                  <option key={uid} value={uid}>
-                    {membersInfo[uid]?.displayName || 'Unknown'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-stone-600 block mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" /> Date
-              </label>
-              <input
-                type="date"
-                value={parsedSession.sessionDate}
-                onChange={e => setParsedSession({ ...parsedSession, sessionDate: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-stone-400"
-              />
-            </div>
-          </div>
-
-          {/* Itemized Table */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-stone-800">Parsed Items ({parsedSession.items.length})</h3>
-              <button
-                type="button"
-                onClick={addPreviewItem}
-                className="text-xs bg-stone-800 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-stone-700 transition-colors flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Item
-              </button>
-            </div>
-
-            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-              {parsedSession.items.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className={`bg-white border rounded-xl p-3 text-xs flex flex-col gap-2 shadow-sm ${
-                    item.isAmbiguous ? 'border-amber-400 bg-amber-50/30' : 'border-stone-200'
-                  }`}
+            {/* Itemized Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Parsed Items ({parsedSession.items.length})</h3>
+                <button
+                  type="button"
+                  onClick={addPreviewItem}
+                  className="btn-primary px-2.5 py-1 text-xs font-medium flex items-center gap-1"
                 >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={item.item}
-                      onChange={e => updatePreviewItem(idx, 'item', e.target.value)}
-                      className="flex-1 font-semibold text-stone-900 border border-stone-200 px-2 py-1 rounded-md focus:outline-none"
-                    />
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </button>
+              </div>
 
-                    <div className="relative w-24">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400">₹</span>
+              <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                {parsedSession.items.map((item, idx) => (
+                  <motion.div
+                    key={item.id || idx}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.03 }}
+                    className={`glass-light rounded-xl p-3 text-xs flex flex-col gap-2 ${
+                      item.isAmbiguous ? 'border-accent-amber/30 bg-accent-amber/5' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
                       <input
-                        type="number"
-                        step="0.01"
-                        value={item.totalAmount || ''}
-                        onChange={e => updatePreviewItem(idx, 'totalAmount', parseFloat(e.target.value) || 0)}
-                        className="w-full pl-5 pr-2 py-1 font-bold border border-stone-200 rounded-md focus:outline-none"
+                        type="text"
+                        value={item.item}
+                        onChange={e => updatePreviewItem(idx, 'item', e.target.value)}
+                        className="input-dark flex-1 font-semibold text-white px-2.5 py-1 text-xs"
                       />
+
+                      <div className="relative w-24">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-brand-300/40 text-xs">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.totalAmount || ''}
+                          onChange={e => updatePreviewItem(idx, 'totalAmount', parseFloat(e.target.value) || 0)}
+                          className="input-dark w-full pl-5 pr-2 py-1 font-bold text-xs"
+                        />
+                      </div>
+
+                      <select
+                        value={item.category}
+                        onChange={e => updatePreviewItem(idx, 'category', e.target.value as ExpenseCategory)}
+                        className="input-dark px-1.5 py-1 text-[11px] font-medium"
+                      >
+                        {CATEGORIES.map(c => (
+                          <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => removePreviewItem(idx)}
+                        className="p-1 text-brand-300/30 hover:text-accent-red rounded transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
-                    <select
-                      value={item.category}
-                      onChange={e => updatePreviewItem(idx, 'category', e.target.value as ExpenseCategory)}
-                      className="border border-stone-200 rounded-md px-1.5 py-1 bg-stone-50 font-medium"
-                    >
-                      {CATEGORIES.map(c => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => removePreviewItem(idx)}
-                      className="p-1 text-stone-400 hover:text-red-500 rounded hover:bg-stone-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Owner Pill Multi-Select */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-stone-100">
-                    <span className="text-stone-400 font-medium text-[11px]">Owners:</span>
-                    {memberUids.map(uid => {
-                      const isOwner = item.owners.includes(uid);
-                      return (
-                        <button
-                          key={uid}
-                          type="button"
-                          onClick={() => togglePreviewOwner(idx, uid)}
-                          className={`px-2 py-0.5 rounded-full border text-[11px] font-medium transition-colors ${
-                            isOwner
-                              ? 'bg-stone-800 text-white border-stone-800'
-                              : 'bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100'
-                          }`}
-                        >
-                          {membersInfo[uid]?.displayName || 'User'}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Action Footer */}
-          <div className="flex items-center justify-between pt-3 border-t border-stone-200">
-            <div>
-              <span className="text-xs text-stone-500 block">Grand Total</span>
-              <span className="text-lg font-bold text-stone-900">₹{grandTotal.toFixed(2)}</span>
+                    {/* Owner Pill Multi-Select */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-white/5">
+                      <span className="text-brand-300/40 font-medium text-[11px]">Owners:</span>
+                      {memberUids.map(uid => {
+                        const isOwner = item.owners.includes(uid);
+                        return (
+                          <button
+                            key={uid}
+                            type="button"
+                            onClick={() => togglePreviewOwner(idx, uid)}
+                            className={`px-2 py-0.5 rounded-full border text-[11px] font-medium transition-all ${
+                              isOwner
+                                ? 'bg-brand-600/30 text-brand-200 border-brand-500/30'
+                                : 'bg-white/5 text-brand-300/40 border-white/5 hover:border-white/15'
+                            }`}
+                          >
+                            {membersInfo[uid]?.displayName || 'User'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setParsedSession(null)}
-                className="px-3.5 py-2 border border-stone-200 text-stone-600 rounded-xl text-xs font-medium hover:bg-stone-100"
-              >
-                Discard
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveParsedSession}
-                disabled={isSavingSession}
-                className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                {isSavingSession ? 'Saving Session...' : 'Save Shopping Session'}
-              </button>
+            {/* Action Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/5">
+              <div>
+                <span className="text-xs text-brand-300/50 block">Grand Total</span>
+                <span className="text-lg font-bold text-white">₹{grandTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setParsedSession(null)}
+                  className="btn-ghost px-3.5 py-2 rounded-xl text-xs font-medium"
+                >
+                  Discard
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveParsedSession}
+                  disabled={isSavingSession}
+                  className="btn-primary px-5 py-2 text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  {isSavingSession ? 'Saving Session...' : 'Save Shopping Session'}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

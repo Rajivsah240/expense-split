@@ -67,7 +67,7 @@ export async function parseExpensesHybrid(options: HybridParseOptions): Promise<
         shares[uid] = splitVal;
       });
 
-      const category: ExpenseCategory = raw.category && ['Vegetables', 'Dairy', 'Snacks', 'Beverages', 'Household', 'Personal Care', 'Rent & Bills', 'General'].includes(raw.category)
+      const category: ExpenseCategory = raw.category && ['Vegetables', 'Dairy', 'Snacks', 'Beverages', 'Household', 'Personal Care', 'Cleaning', 'Miscellaneous'].includes(raw.category)
         ? raw.category
         : categorizeItem(raw.item || '');
 

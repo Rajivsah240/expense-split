@@ -55,5 +55,18 @@ export function useAuth() {
     }
   };
 
-  return { user, loading, requestOtp, verifyOtp, logout, updateUsername };
+  const updateProfile = async (data: { displayName?: string; username?: string }): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const result = await api<{ user: UserProfile }>('auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      });
+      setUser(result.user);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Unable to update profile.' };
+    }
+  };
+
+  return { user, loading, requestOtp, verifyOtp, logout, updateUsername, updateProfile };
 }

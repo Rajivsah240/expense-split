@@ -84,6 +84,37 @@ export async function handleApi(req: ApiRequest, res: ApiResponse, path: string[
       );
       return res.status(200).json({ user: userProfile });
     }
+    if (route === 'auth/profile' && method === 'PATCH') {
+      const update: Record<string, string> = {};
+      const displayName = String(req.body?.displayName || '').trim();
+      const username = String(req.body?.username || '').trim().replace(/^@/, '');
+      if (displayName && displayName.length >= 1 && displayName.length <= 50) {
+        update.displayName = displayName;
+      }
+      if (username && isUsername(username)) {
+        update.username = username;
+        update.usernameLower = username.toLowerCase();
+      }
+      if (Object.keys(update).length === 0) throw new Error('Provide a valid displayName or username to update.');
+      let updatedUser;
+      try {
+        updatedUser = await User.findByIdAndUpdate(
+          currentUserId,
+          { $set: update },
+          { new: true, runValidators: true }
+        );
+      } catch (error: any) {
+        if (error?.code === 11000) return res.status(409).json({ error: `Username @${username} is already taken.` });
+        throw error;
+      }
+      if (!updatedUser) throw new Error('Your account no longer exists.');
+      const userProfile = profile(updatedUser);
+      await Team.updateMany(
+        { memberIds: currentUserId },
+        { $set: { [`membersInfo.${currentUserId}`]: userProfile } }
+      );
+      return res.status(200).json({ user: userProfile });
+    }
 
     if (route === 'teams' && method === 'GET') {
       const teams = await Team.find({ memberIds: currentUserId }).sort({ createdAt: -1 });

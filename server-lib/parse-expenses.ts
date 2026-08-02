@@ -57,7 +57,7 @@ Rules:
    - If "me" or "myself": owners = [${paidByUid}].
    - If initials or names are written (e.g. "A", "R", "B", "AR", "A,R", "Ashutosh"): match to corresponding user UIDs.
    - DO NOT CALCULATE BALANCES or settlements. Only identify the items, total prices, and owner UIDs.
-4. Categorize each item into one of: 'Vegetables', 'Dairy', 'Snacks', 'Beverages', 'Household', 'Personal Care', 'Rent & Bills', 'General'.
+4. Categorize each item into one of: 'Vegetables', 'Dairy', 'Snacks', 'Beverages', 'Household', 'Personal Care', 'Cleaning', 'Miscellaneous'.
 5. If owner mapping is uncertain or ambiguous, set 'isAmbiguous': true.
 `
     });
@@ -85,7 +85,7 @@ Rules:
                   },
                   category: {
                     type: Type.STRING,
-                    description: "Category: Vegetables, Dairy, Snacks, Beverages, Household, Personal Care, Rent & Bills, or General"
+                    description: "Category: Vegetables, Dairy, Snacks, Beverages, Household, Personal Care, Cleaning, or Miscellaneous"
                   },
                   isAmbiguous: {
                     type: Type.BOOLEAN,

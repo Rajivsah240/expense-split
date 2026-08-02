@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Expense, UserProfile, ExpenseCategory } from '../types';
-import { CATEGORIES } from '../utils/categories';
+import { CATEGORIES, CATEGORY_ICONS, CATEGORY_COLORS, categorizeItem } from '../utils/categories';
+import { motion } from 'motion/react';
 import { PieChart, TrendingUp, ShoppingBag, UserCheck, BarChart3, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -8,6 +9,17 @@ interface AnalyticsDashboardProps {
   expenses: Expense[];
   membersInfo: Record<string, UserProfile>;
 }
+
+const BAR_COLORS: string[] = [
+  'bg-brand-500',
+  'bg-accent-green',
+  'bg-accent-amber',
+  'bg-accent-cyan',
+  'bg-accent-pink',
+  'bg-purple-500',
+  'bg-teal-500',
+  'bg-orange-500'
+];
 
 export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboardProps) {
   const memberUids = useMemo(() => Object.keys(membersInfo), [membersInfo]);
@@ -48,8 +60,8 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
       Beverages: 0,
       Household: 0,
       'Personal Care': 0,
-      'Rent & Bills': 0,
-      General: 0
+      Cleaning: 0,
+      Miscellaneous: 0
     };
 
     const memberPaid: Record<string, number> = {};
@@ -68,7 +80,7 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
           totalSpending += item.totalAmount;
 
           // Category
-          const cat = item.category || 'General';
+          const cat = item.category || 'Miscellaneous';
           categoryTotals[cat] = (categoryTotals[cat] || 0) + item.totalAmount;
 
           // Shared vs Personal
@@ -100,7 +112,7 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
       } else {
         // Legacy single item expense
         totalSpending += exp.totalAmount;
-        const cat = categorizeLegacyCategory(exp.item || '');
+        const cat = categorizeItem(exp.item || '');
         categoryTotals[cat] = (categoryTotals[cat] || 0) + exp.totalAmount;
 
         const owners = Object.keys(exp.shares || {});
@@ -150,21 +162,21 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
   return (
     <div className="space-y-6">
       {/* Header & Month Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-5 rounded-2xl">
         <div>
-          <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-stone-800" />
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-brand-400" />
             Spending Analytics
           </h2>
-          <p className="text-xs text-stone-500">Visual breakdown of expenses, categories, and member shares</p>
+          <p className="text-xs text-brand-300/50">Visual breakdown of expenses, categories, and member shares</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-stone-400" />
+          <Calendar className="w-4 h-4 text-brand-400/50" />
           <select
             value={selectedMonth}
             onChange={e => setSelectedMonth(e.target.value)}
-            className="bg-stone-50 border border-stone-200 text-stone-800 text-xs font-medium rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400"
+            className="input-dark text-xs font-medium rounded-xl px-3 py-2"
           >
             <option value="all">All Time</option>
             {availableMonths.map(m => {
@@ -181,103 +193,134 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
 
       {/* Top Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-stone-400 uppercase tracking-wider block mb-1">Total Spending</span>
-          <span className="text-2xl font-bold text-stone-900">₹{stats.totalSpending.toFixed(2)}</span>
-          <span className="text-xs text-stone-500 block mt-1">Across {filteredExpenses.length} shopping sessions</span>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-5"
+        >
+          <span className="text-xs font-medium text-brand-300/50 uppercase tracking-wider block mb-1">Total Spending</span>
+          <span className="text-2xl font-bold text-white">₹{stats.totalSpending.toFixed(2)}</span>
+          <span className="text-xs text-brand-300/40 block mt-1">Across {filteredExpenses.length} shopping sessions</span>
+        </motion.div>
 
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-stone-400 uppercase tracking-wider block mb-1">Shared Expenses</span>
-          <span className="text-2xl font-bold text-emerald-600">₹{stats.sharedSpending.toFixed(2)}</span>
-          <span className="text-xs text-stone-500 block mt-1">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="glass-card rounded-2xl p-5"
+        >
+          <span className="text-xs font-medium text-brand-300/50 uppercase tracking-wider block mb-1">Shared Expenses</span>
+          <span className="text-2xl font-bold text-accent-green">₹{stats.sharedSpending.toFixed(2)}</span>
+          <span className="text-xs text-brand-300/40 block mt-1">
             {stats.totalSpending > 0 ? ((stats.sharedSpending / stats.totalSpending) * 100).toFixed(0) : 0}% of total
           </span>
-        </div>
+        </motion.div>
 
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-stone-400 uppercase tracking-wider block mb-1">Personal Expenses</span>
-          <span className="text-2xl font-bold text-amber-600">₹{stats.personalSpending.toFixed(2)}</span>
-          <span className="text-xs text-stone-500 block mt-1">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="glass-card rounded-2xl p-5"
+        >
+          <span className="text-xs font-medium text-brand-300/50 uppercase tracking-wider block mb-1">Personal Expenses</span>
+          <span className="text-2xl font-bold text-accent-amber">₹{stats.personalSpending.toFixed(2)}</span>
+          <span className="text-xs text-brand-300/40 block mt-1">
             {stats.totalSpending > 0 ? ((stats.personalSpending / stats.totalSpending) * 100).toFixed(0) : 0}% of total
           </span>
-        </div>
+        </motion.div>
       </div>
 
       {/* Category Breakdown & Member Consumption */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category Breakdown */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-stone-800 flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-stone-600" />
+        <div className="glass-card rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <PieChart className="w-4 h-4 text-brand-400" />
             Category Breakdown
           </h3>
 
           <div className="space-y-3">
-            {CATEGORIES.map(cat => {
+            {CATEGORIES.map((cat, catIdx) => {
               const amount = stats.categoryTotals[cat] || 0;
               const percentage = stats.totalSpending > 0 ? (amount / stats.totalSpending) * 100 : 0;
 
               if (amount === 0) return null;
 
               return (
-                <div key={cat} className="space-y-1">
+                <motion.div
+                  key={cat}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: catIdx * 0.04 }}
+                  className="space-y-1.5"
+                >
                   <div className="flex justify-between text-xs font-medium">
-                    <span className="text-stone-700">{cat}</span>
-                    <span className="text-stone-900 font-bold">
+                    <span className="text-brand-200/80 flex items-center gap-1.5">
+                      {CATEGORY_ICONS[cat]} {cat}
+                    </span>
+                    <span className="text-white font-bold">
                       ₹{amount.toFixed(0)} ({percentage.toFixed(0)}%)
                     </span>
                   </div>
-                  <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-stone-800 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${percentage}%` }}
+                  <div className="w-full bg-white/5 h-2.5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percentage}%` }}
+                      transition={{ duration: 0.8, delay: catIdx * 0.05 }}
+                      className={`h-full rounded-full ${BAR_COLORS[catIdx % BAR_COLORS.length]}`}
                     />
                   </div>
-                </div>
+                </motion.div>
               );
             })}
 
             {stats.totalSpending === 0 && (
-              <p className="text-xs text-stone-400 text-center py-6">No category data recorded for this period.</p>
+              <p className="text-xs text-brand-300/30 text-center py-6">No category data recorded for this period.</p>
             )}
           </div>
         </div>
 
         {/* Member Breakdown: Paid vs Consumed */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-stone-800 flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-stone-600" />
+        <div className="glass-card rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-brand-400" />
             Member Shares (Paid vs Consumed)
           </h3>
 
           <div className="space-y-4">
-            {memberUids.map(uid => {
+            {memberUids.map((uid, idx) => {
               const paid = stats.memberPaid[uid] || 0;
               const consumed = stats.memberConsumed[uid] || 0;
               const memberName = membersInfo[uid]?.displayName || 'Unknown';
+              const isPositive = paid >= consumed;
 
               return (
-                <div key={uid} className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-2">
-                  <div className="flex justify-between items-center text-xs font-bold text-stone-800">
-                    <span>{memberName}</span>
-                    <span className={paid >= consumed ? 'text-emerald-600' : 'text-red-500'}>
-                      {paid >= consumed ? `+₹${(paid - consumed).toFixed(0)}` : `-₹${(consumed - paid).toFixed(0)}`}
+                <motion.div
+                  key={uid}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="glass-light rounded-xl p-3 space-y-2"
+                >
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-white">{memberName}</span>
+                    <span className={isPositive ? 'text-accent-green' : 'text-accent-red'}>
+                      {isPositive ? `+₹${(paid - consumed).toFixed(0)}` : `-₹${(consumed - paid).toFixed(0)}`}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-white p-2 rounded-lg border border-stone-200">
-                      <span className="text-stone-400 block">Total Paid</span>
-                      <span className="font-bold text-stone-800">₹{paid.toFixed(2)}</span>
+                    <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                      <span className="text-brand-300/40 block">Total Paid</span>
+                      <span className="font-bold text-white">₹{paid.toFixed(2)}</span>
                     </div>
 
-                    <div className="bg-white p-2 rounded-lg border border-stone-200">
-                      <span className="text-stone-400 block">Actual Share</span>
-                      <span className="font-bold text-stone-800">₹{consumed.toFixed(2)}</span>
+                    <div className="bg-white/5 p-2 rounded-lg border border-white/5">
+                      <span className="text-brand-300/40 block">Actual Share</span>
+                      <span className="font-bold text-white">₹{consumed.toFixed(2)}</span>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -285,44 +328,39 @@ export function AnalyticsDashboard({ expenses, membersInfo }: AnalyticsDashboard
       </div>
 
       {/* Top Purchased Items */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
-        <h3 className="text-sm font-bold text-stone-800 mb-3 flex items-center gap-2">
-          <ShoppingBag className="w-4 h-4 text-stone-600" />
+      <div className="glass-card rounded-2xl p-5">
+        <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+          <ShoppingBag className="w-4 h-4 text-brand-400" />
           Top Purchased Items
         </h3>
 
         {stats.topItems.length > 0 ? (
-          <div className="divide-y divide-stone-100">
+          <div className="divide-y divide-white/5">
             {stats.topItems.map((item, idx) => (
-              <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className="py-3 flex items-center justify-between text-xs"
+              >
                 <div className="flex items-center gap-3">
-                  <span className="w-5 h-5 rounded-full bg-stone-100 font-bold text-stone-600 flex items-center justify-center text-[10px]">
+                  <span className="w-6 h-6 rounded-full bg-gradient-brand font-bold text-white flex items-center justify-center text-[10px]">
                     {idx + 1}
                   </span>
-                  <span className="font-semibold text-stone-800 capitalize">{item.name}</span>
+                  <span className="font-semibold text-white capitalize">{item.name}</span>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-stone-900 block">₹{item.total.toFixed(2)}</span>
-                  <span className="text-stone-400 text-[10px]">{item.count} times purchased</span>
+                  <span className="font-bold text-white block">₹{item.total.toFixed(2)}</span>
+                  <span className="text-brand-300/30 text-[10px]">{item.count} times purchased</span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-stone-400 py-4 text-center">No top items recorded yet.</p>
+          <p className="text-xs text-brand-300/30 py-4 text-center">No top items recorded yet.</p>
         )}
       </div>
     </div>
   );
-}
-
-function categorizeLegacyCategory(itemStr: string): ExpenseCategory {
-  const name = itemStr.toLowerCase();
-  if (/veg|tomato|potato|onion|chilli|sabzi/.test(name)) return 'Vegetables';
-  if (/milk|paneer|butter|curd|cheese|dahi/.test(name)) return 'Dairy';
-  if (/chip|chocolate|biscuit|cookie|snack/.test(name)) return 'Snacks';
-  if (/coke|juice|drink|water|chai|coffee/.test(name)) return 'Beverages';
-  if (/surf|vim|cleaner|detergent/.test(name)) return 'Household';
-  if (/soap|shampoo|paste|brush/.test(name)) return 'Personal Care';
-  return 'General';
 }

@@ -16,15 +16,15 @@ export interface Team {
   createdAt: number;
 }
 
-export type ExpenseCategory = 
-  | 'Vegetables' 
-  | 'Dairy' 
-  | 'Snacks' 
-  | 'Beverages' 
-  | 'Household' 
-  | 'Personal Care' 
-  | 'Rent & Bills'
-  | 'General';
+export type ExpenseCategory =
+  | 'Vegetables'
+  | 'Dairy'
+  | 'Snacks'
+  | 'Beverages'
+  | 'Household'
+  | 'Personal Care'
+  | 'Cleaning'
+  | 'Miscellaneous';
 
 export interface SessionItem {
   id: string;
@@ -75,6 +75,6 @@ export interface Expense {
   notes?: string;
   sessionDate?: number;
   createdBy?: string;
+  paidTo?: string;
   items?: SessionItem[];
 }
-
