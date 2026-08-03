@@ -1,72 +1,73 @@
-import { useEffect, useState } from 'react';
-import { api, ApiError, clearAccessToken, getAccessToken, setAccessToken } from '../lib/api';
-import { UserProfile } from '../types';
+import { useCallback, useEffect, useState } from 'react';
+import type { Me, NotificationPrefs } from '@shared/types';
+import { api, clearToken, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
+
+export interface AuthState {
+  me: Me | null;
+  loading: boolean;
+}
 
 export function useAuth() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(Boolean(getToken()));
+
+  const signOut = useCallback(() => {
+    clearToken();
+    setMe(null);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (!getAccessToken()) {
+    setUnauthorizedHandler(() => setMe(null));
+  }, []);
+
+  useEffect(() => {
+    if (!getToken()) {
       setLoading(false);
       return;
     }
-
-    api<{ user: UserProfile }>('auth/me')
-      .then(({ user }) => setUser(user))
-      .catch((error) => {
-        if (error instanceof ApiError && error.status === 401) clearAccessToken();
-        console.warn('Could not restore the signed-in session:', error);
+    let cancelled = false;
+    api<{ user: Me }>('me')
+      .then(result => {
+        if (!cancelled) setMe(result.user);
       })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) clearToken();
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const requestOtp = async (email: string) => {
-    await api('auth/request-otp', {
+  const requestOtp = useCallback(async (email: string) => {
+    await api('auth/request-otp', { method: 'POST', body: { email } });
+  }, []);
+
+  const verifyOtp = useCallback(async (email: string, code: string) => {
+    const result = await api<{ token: string; user: Me }>('auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({ email })
+      body: { email, code },
     });
-  };
+    setToken(result.token);
+    setMe(result.user);
+    return result.user;
+  }, []);
 
-  const verifyOtp = async (email: string, otp: string) => {
-    const result = await api<{ token: string; user: UserProfile }>('auth/verify-otp', {
-      method: 'POST',
-      body: JSON.stringify({ email, otp })
-    });
-    setAccessToken(result.token);
-    setUser(result.user);
-  };
+  const saveProfile = useCallback(
+    async (patch: { displayName?: string; username?: string; notificationPrefs?: Partial<NotificationPrefs> }) => {
+      const result = await api<{ user: Me }>('me', { method: 'PATCH', body: patch });
+      setMe(result.user);
+      return result.user;
+    },
+    []
+  );
 
-  const logout = async () => {
-    clearAccessToken();
-    setUser(null);
-  };
+  const checkUsername = useCallback(async (username: string) => {
+    return api<{ available: boolean; reason: string }>('me/username-available', { query: { username } });
+  }, []);
 
-  const updateUsername = async (username: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const result = await api<{ user: UserProfile }>('auth/username', {
-        method: 'PATCH',
-        body: JSON.stringify({ username })
-      });
-      setUser(result.user);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Unable to update username.' };
-    }
-  };
-
-  const updateProfile = async (data: { displayName?: string; username?: string }): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const result = await api<{ user: UserProfile }>('auth/profile', {
-        method: 'PATCH',
-        body: JSON.stringify(data)
-      });
-      setUser(result.user);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Unable to update profile.' };
-    }
-  };
-
-  return { user, loading, requestOtp, verifyOtp, logout, updateUsername, updateProfile };
+  return { me, loading, requestOtp, verifyOtp, saveProfile, checkUsername, signOut };
 }

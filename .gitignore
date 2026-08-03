@@ -1,9 +1,14 @@
 node_modules/
-build/
 dist/
+build/
 coverage/
-.DS_Store
-*.log
+
+# vite-plugin-pwa writes a dev service worker here
+dev-dist/
+
 .env*
 !.env.example
-firebase-applet-config.json
+
+*.log
+.DS_Store
+.vercel

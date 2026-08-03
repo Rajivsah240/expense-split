@@ -1,0 +1,596 @@
+/**
+ * The add-expense flow. Three ways in, one review step out:
+ *
+ *   Paste   — rule parser runs instantly on-device; only messy input costs an AI call
+ *   Photo   — receipt goes to the AI extractor, downscaled first
+ *   Manual  — a single row, for when you already know exactly what you're adding
+ *
+ * Every path lands on the same review table, and nothing is written until save.
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  ArrowLeft,
+  Camera,
+  Image as ImageIcon,
+  Keyboard,
+  MessageSquareText,
+  ScanLine,
+  Sparkles,
+  Wand2,
+  X,
+} from 'lucide-react';
+import { parseAmount } from '@shared/money';
+import { isConfident, parseExpenseText } from '@shared/parser';
+import type { DraftItem, Group, Member, Session } from '@shared/types';
+import { api } from '../lib/api';
+import { toDateInput } from '../lib/format';
+import { prepareReceiptImage } from '../lib/image';
+import { DraftEditor, emptyDraftItem, validateDraft } from './DraftEditor';
+import { Button, Field, Sheet, Spinner, Tag, useToast } from './ui';
+
+type Mode = 'paste' | 'photo' | 'manual';
+type Stage = 'input' | 'review';
+
+const PLACEHOLDER = `Vegetables - 130/3
+Milk - 100/3
+Chocolate - 20 B
+Chicken - 420 AR
+Eggs=120 R
+Rice 300 all`;
+
+interface AddSheetProps {
+  open: boolean;
+  onClose: () => void;
+  group: Group;
+  members: Member[];
+  currentUserId: string;
+  onSaved: (session: Session) => void;
+  onOpenWhatsapp: () => void;
+}
+
+export function AddSheet({
+  open,
+  onClose,
+  group,
+  members,
+  currentUserId,
+  onSaved,
+  onOpenWhatsapp,
+}: AddSheetProps) {
+  const toast = useToast();
+  const allIds = useMemo(() => members.map(member => member.userId), [members]);
+
+  const [mode, setMode] = useState<Mode>('paste');
+  const [stage, setStage] = useState<Stage>('input');
+  const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState('');
+  const [error, setError] = useState('');
+
+  const [text, setText] = useState('');
+  const [image, setImage] = useState<{ dataUrl: string; mimeType: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  const [items, setItems] = useState<DraftItem[]>([]);
+  const [shop, setShop] = useState('');
+  const [notes, setNotes] = useState('');
+  const [date, setDate] = useState(toDateInput(Date.now()));
+  const [paidBy, setPaidBy] = useState(currentUserId);
+  const [usedAi, setUsedAi] = useState(false);
+  const [payerHint, setPayerHint] = useState<Member | null>(null);
+
+  const reset = () => {
+    setMode('paste');
+    setStage('input');
+    setBusy(false);
+    setBusyLabel('');
+    setError('');
+    setText('');
+    setImage(null);
+    setItems([]);
+    setShop('');
+    setNotes('');
+    setDate(toDateInput(Date.now()));
+    setPaidBy(currentUserId);
+    setUsedAi(false);
+    setPayerHint(null);
+  };
+
+  useEffect(() => {
+    if (open) reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const startManual = () => {
+    setMode('manual');
+    setItems([emptyDraftItem(allIds)]);
+    setStage('review');
+  };
+
+  const reviewPastedText = async () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      // On-device first. Most WhatsApp-style lists never need the network.
+      const local = parseExpenseText(trimmed, {
+        members,
+        payerId: paidBy,
+        assumeSharedWhenUnspecified: group.settings.assumeSharedWhenUnspecified,
+      });
+
+      if (local.senderHint) {
+        const hinted = members.find(
+          member =>
+            member.displayName.toLowerCase() === local.senderHint.toLowerCase() ||
+            member.displayName.toLowerCase().split(' ')[0] === local.senderHint.toLowerCase().split(' ')[0]
+        );
+        setPayerHint(hinted && hinted.userId !== paidBy ? hinted : null);
+      }
+
+      if (isConfident(local)) {
+        setItems(
+          local.rows.map(row => ({
+            id: `${row.name}-${row.amount}-${Math.random().toString(36).slice(2, 7)}`,
+            name: row.name,
+            amount: (row.amount / 100).toString(),
+            owners: row.owners,
+            category: row.category,
+            assumed: row.assumed,
+            needsOwners: row.needsOwners,
+            reason: row.reason,
+          }))
+        );
+        if (local.shop) setShop(local.shop);
+        setUsedAi(false);
+        setStage('review');
+        return;
+      }
+
+      setBusyLabel('Reading it with AI…');
+      const result = await api<{ shop: string; items: DraftItem[]; usedAi: boolean; warning?: string }>(
+        `groups/${group.id}/ai/text`,
+        { method: 'POST', body: { text: trimmed, payerId: paidBy } }
+      );
+
+      if (result.items.length === 0) {
+        setError("Couldn't find any items in that. Try one item per line, like \"Milk - 100/3\".");
+        return;
+      }
+
+      setItems(result.items);
+      if (result.shop) setShop(result.shop);
+      setUsedAi(result.usedAi);
+      if (result.warning) toast(result.warning, 'info');
+      setStage('review');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not read that text.');
+    } finally {
+      setBusy(false);
+      setBusyLabel('');
+    }
+  };
+
+  const pickImage = async (file: File | undefined) => {
+    if (!file) return;
+    setError('');
+    try {
+      const prepared = await prepareReceiptImage(file);
+      setImage({ dataUrl: prepared.dataUrl, mimeType: prepared.mimeType });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not read that image.');
+    }
+  };
+
+  const scanReceipt = async () => {
+    if (!image) return;
+    setBusy(true);
+    setBusyLabel('Reading the receipt…');
+    setError('');
+    try {
+      const result = await api<{ shop: string; date: string; items: DraftItem[] }>(
+        `groups/${group.id}/ai/receipt`,
+        { method: 'POST', body: { imageBase64: image.dataUrl, mimeType: image.mimeType, payerId: paidBy } }
+      );
+
+      if (result.items.length === 0) {
+        setError("Couldn't read any items off that photo. Try a straighter, brighter shot.");
+        return;
+      }
+
+      setItems(result.items);
+      if (result.shop) setShop(result.shop);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(result.date)) setDate(result.date);
+      setUsedAi(true);
+      setStage('review');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not scan that receipt.');
+    } finally {
+      setBusy(false);
+      setBusyLabel('');
+    }
+  };
+
+  const validity = useMemo(() => validateDraft(items), [items]);
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const payload = items
+        .map(item => ({
+          name: item.name.trim(),
+          amount: parseAmount(item.amount) ?? 0,
+          owners: item.owners,
+          category: item.category,
+        }))
+        .filter(item => item.name && item.amount > 0);
+
+      const result = await api<{ session: Session }>(`groups/${group.id}/sessions`, {
+        method: 'POST',
+        body: {
+          date,
+          shop: shop.trim(),
+          notes: notes.trim(),
+          paidBy,
+          items: payload,
+          source: mode === 'manual' ? 'manual' : mode === 'photo' ? 'receipt' : 'text',
+        },
+      });
+
+      onSaved(result.session);
+      toast(`Saved ${payload.length} item${payload.length === 1 ? '' : 's'}.`, 'success');
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save this.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const footer =
+    stage === 'review' ? (
+      <div className="flex gap-2.5">
+        {mode !== 'manual' && (
+          <Button variant="secondary" size="lg" onClick={() => setStage('input')} icon={<ArrowLeft className="size-4" />}>
+            Back
+          </Button>
+        )}
+        <Button
+          size="lg"
+          block
+          loading={busy}
+          disabled={!validity.canSave}
+          onClick={() => void save()}
+        >
+          {validity.blocking > 0 ? 'Assign owners to save' : 'Save to ledger'}
+        </Button>
+      </div>
+    ) : mode === 'paste' ? (
+      <Button
+        size="lg"
+        block
+        loading={busy}
+        disabled={!text.trim()}
+        onClick={() => void reviewPastedText()}
+        icon={<Wand2 className="size-[18px]" />}
+      >
+        {busyLabel || 'Review items'}
+      </Button>
+    ) : (
+      <Button
+        size="lg"
+        block
+        loading={busy}
+        disabled={!image}
+        onClick={() => void scanReceipt()}
+        icon={<ScanLine className="size-[18px]" />}
+      >
+        {busyLabel || 'Scan receipt'}
+      </Button>
+    );
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      size="tall"
+      title={stage === 'review' ? 'Check and save' : 'Add expenses'}
+      subtitle={
+        stage === 'review'
+          ? 'Edit anything before it hits the ledger.'
+          : group.name
+      }
+      footer={footer}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {stage === 'input' ? (
+          <motion.div
+            key="input"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-3 gap-2">
+              <ModeButton
+                active={mode === 'paste'}
+                icon={<MessageSquareText className="size-[19px]" />}
+                label="Paste"
+                onClick={() => setMode('paste')}
+              />
+              <ModeButton
+                active={mode === 'photo'}
+                icon={<Camera className="size-[19px]" />}
+                label="Receipt"
+                onClick={() => setMode('photo')}
+              />
+              <ModeButton
+                active={false}
+                icon={<Keyboard className="size-[19px]" />}
+                label="Manual"
+                onClick={startManual}
+              />
+            </div>
+
+            {mode === 'paste' ? (
+              <>
+                <Field
+                  label="What did you buy?"
+                  hint="Write it exactly the way you'd send it in the group. Initials, brackets, slashes and typos are all fine."
+                >
+                  <textarea
+                    value={text}
+                    onChange={event => setText(event.target.value)}
+                    placeholder={PLACEHOLDER}
+                    rows={8}
+                    className="field resize-y font-mono text-[14px] leading-relaxed"
+                    autoFocus
+                  />
+                </Field>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenWhatsapp();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-[13px] border border-line bg-surface-2 px-3.5 py-3 text-left transition-colors hover:border-brand-line"
+                >
+                  <Sparkles className="size-[18px] shrink-0 text-brand" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-bold text-ink">Import a whole chat</span>
+                    <span className="block text-[12px] text-muted">
+                      Paste days of WhatsApp messages and get grouped shopping trips.
+                    </span>
+                  </span>
+                </button>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={event => void pickImage(event.target.files?.[0])}
+                />
+                <input
+                  ref={cameraRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={event => void pickImage(event.target.files?.[0])}
+                />
+
+                {image ? (
+                  <div className="relative overflow-hidden rounded-[14px] border border-line">
+                    <img src={image.dataUrl} alt="Receipt preview" className="max-h-[46dvh] w-full object-contain bg-surface-2" />
+                    <button
+                      type="button"
+                      onClick={() => setImage(null)}
+                      aria-label="Remove photo"
+                      className="tap absolute right-2 top-2 rounded-full bg-ink/70 text-white backdrop-blur"
+                    >
+                      <X className="size-[18px]" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => cameraRef.current?.click()}
+                      className="flex h-[104px] flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-line-strong bg-surface-2 text-muted transition-colors hover:border-brand hover:text-brand"
+                    >
+                      <Camera className="size-6" />
+                      <span className="text-[13px] font-semibold">Take a photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      className="flex h-[104px] flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-line-strong bg-surface-2 text-muted transition-colors hover:border-brand hover:text-brand"
+                    >
+                      <ImageIcon className="size-6" />
+                      <span className="text-[13px] font-semibold">Choose a file</span>
+                    </button>
+                  </div>
+                )}
+
+                <p className="px-1 text-[12px] leading-relaxed text-faint">
+                  Receipts don't say who owns what, so everything starts as shared by everyone. You'll set
+                  owners on the next screen before anything is saved.
+                </p>
+              </div>
+            )}
+
+            <PayerAndDate
+              members={members}
+              paidBy={paidBy}
+              onPaidBy={setPaidBy}
+              date={date}
+              onDate={setDate}
+            />
+
+            {busyLabel && (
+              <div className="flex items-center justify-center gap-2 py-1 text-[13px] font-medium text-muted">
+                <Spinner className="size-4" />
+                {busyLabel}
+              </div>
+            )}
+
+            {error && <ErrorNote>{error}</ErrorNote>}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="review"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-4"
+          >
+            {usedAi && (
+              <div className="flex items-center gap-2">
+                <Tag tone="brand">
+                  <Sparkles className="size-3" />
+                  Read with AI
+                </Tag>
+                <span className="text-[12px] text-faint">Amounts are yours to verify.</span>
+              </div>
+            )}
+
+            {payerHint && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPaidBy(payerHint.userId);
+                  setPayerHint(null);
+                }}
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-brand-line bg-brand-soft px-3.5 py-2.5 text-left"
+              >
+                <span className="text-[12.5px] font-medium text-brand-dark">
+                  These messages look like they're from <b>{payerHint.displayName}</b>.
+                </span>
+                <span className="shrink-0 text-[12.5px] font-bold text-brand-dark underline">Set as payer</span>
+              </button>
+            )}
+
+            <DraftEditor items={items} members={members} onChange={setItems} />
+
+            <PayerAndDate
+              members={members}
+              paidBy={paidBy}
+              onPaidBy={setPaidBy}
+              date={date}
+              onDate={setDate}
+            />
+
+            <div className="grid grid-cols-1 gap-3">
+              <Field label="Shop (optional)">
+                <input
+                  type="text"
+                  value={shop}
+                  onChange={event => setShop(event.target.value)}
+                  placeholder="Reliance Fresh"
+                  className="field"
+                  maxLength={80}
+                />
+              </Field>
+              <Field label="Notes (optional)">
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={event => setNotes(event.target.value)}
+                  placeholder="Weekly groceries"
+                  className="field"
+                  maxLength={500}
+                />
+              </Field>
+            </div>
+
+            {error && <ErrorNote>{error}</ErrorNote>}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Sheet>
+  );
+}
+
+function ModeButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex h-[68px] flex-col items-center justify-center gap-1.5 rounded-[14px] border text-[12.5px] font-semibold transition-colors ${
+        active
+          ? 'border-brand bg-brand-soft text-brand-dark'
+          : 'border-line bg-surface text-muted hover:border-line-strong hover:text-ink'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+export function PayerAndDate({
+  members,
+  paidBy,
+  onPaidBy,
+  date,
+  onDate,
+}: {
+  members: Member[];
+  paidBy: string;
+  onPaidBy: (userId: string) => void;
+  date: string;
+  onDate: (date: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Paid by">
+        <select value={paidBy} onChange={event => onPaidBy(event.target.value)} className="field">
+          {members.map(member => (
+            <option key={member.userId} value={member.userId}>
+              {member.displayName}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Date">
+        <input
+          type="date"
+          value={date}
+          onChange={event => onDate(event.target.value)}
+          max={toDateInput(Date.now() + 24 * 60 * 60 * 1000)}
+          className="field"
+        />
+      </Field>
+    </div>
+  );
+}
+
+export function ErrorNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-xl border border-negative/20 bg-negative-soft px-3.5 py-2.5 text-[12.5px] font-medium leading-snug text-negative">
+      {children}
+    </p>
+  );
+}

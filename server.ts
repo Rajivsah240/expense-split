@@ -1,63 +1,59 @@
+/**
+ * Local development / self-hosted server: the same API dispatcher as production,
+ * with Vite middleware in front of it for the client.
+ */
+
 import 'dotenv/config';
-import dns from 'dns';
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { handleApiRequest, segmentsFromPath } from './server/api.js';
 
-// Ensure Node.js uses reliable public DNS servers for MongoDB SRV resolution
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch {
-  // Ignore fallback if custom DNS setup fails
-}
+const PORT = Number(process.env.PORT || 3000);
+// A flag rather than NODE_ENV, so `npm start` behaves the same on Windows and POSIX.
+const isProduction = process.argv.includes('--production') || process.env.NODE_ENV === 'production';
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
-import { handleApi } from './server-lib/api.js';
-import { processParseExpenses } from './server-lib/parse-expenses.js';
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
-  }
-});
-
-async function startServer() {
+async function start() {
   const app = express();
-  const PORT = 3000;
+  app.disable('x-powered-by');
+  // Receipt photos travel as base64 data URLs, so allow a generous JSON body.
+  app.use(express.json({ limit: '12mb' }));
 
-  app.use(express.json({ limit: '50mb' }));
+  app.all('/api/*', async (req, res) => {
+    const query: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.query)) {
+      query[key] = Array.isArray(value) ? String(value[0]) : String(value ?? '');
+    }
 
-  app.post("/api/parse-expenses", (req, res) => {
-    return processParseExpenses(req, res);
-  });
-
-  // All remaining API endpoints are served by the MongoDB-backed API handler.
-  app.all('/api/*', (req, res) => {
-    const pathParts = req.path.replace(/^\/api\/?/, '').split('/').filter(Boolean);
-    return handleApi(req, res, pathParts);
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    const result = await handleApiRequest({
+      method: req.method,
+      segments: segmentsFromPath(req.path),
+      query,
+      body: req.body,
+      authorization: req.headers.authorization,
     });
-    app.use(vite.middlewares);
+
+    res.status(result.status).json(result.body);
+  });
+
+  if (isProduction) {
+    const distDir = path.join(rootDir, 'dist');
+    app.use(express.static(distDir, { index: false, maxAge: '1y' }));
+    app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    const { createServer } = await import('vite');
+    const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
+    app.use(vite.middlewares);
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n  Expense Split ready on http://localhost:${PORT}`);
+    console.log(`  Open it on your phone via your machine's LAN address on port ${PORT}.\n`);
   });
 }
 
-startServer();
+start().catch(error => {
+  console.error('Failed to start the server:', error);
+  process.exit(1);
+});
