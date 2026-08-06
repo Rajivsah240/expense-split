@@ -1,5 +1,12 @@
 import crypto from 'crypto';
-import { balancesFromTotals, formatMoney, minimalTransfers, type Totals } from '../../shared/money.js';
+import {
+  balancesFromTotals,
+  formatMoney,
+  minimalTransfers,
+  netPairwiseTransfers,
+  type PairwiseEntry,
+  type Totals,
+} from '../../shared/money.js';
 import { DEFAULT_GROUP_SETTINGS, type GroupState } from '../../shared/types.js';
 import { connectToDatabase } from '../db.js';
 import { activityDto, groupDto, notificationDto, sessionDto, settlementDto } from '../dto.js';
@@ -60,6 +67,32 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
           { $unwind: '$pairs' },
           { $group: { _id: '$pairs.k', value: { $sum: '$pairs.v' } } },
         ],
+        // Keep the original payer-to-owner relationship as well as the group
+        // totals. The minimum-payment plan below can legitimately route a
+        // payment through someone else, but this lets the UI show who paid.
+        direct: [
+          {
+            $project: {
+              paidBy: 1,
+              pairs: { $objectToArray: { $ifNull: ['$shares', {}] } },
+            },
+          },
+          { $unwind: '$pairs' },
+          {
+            $match: {
+              $expr: {
+                $and: [{ $ne: ['$pairs.k', '$paidBy'] }, { $gt: ['$pairs.v', 0] }],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: { from: '$pairs.k', to: '$paidBy' },
+              amount: { $sum: '$pairs.v' },
+            },
+          },
+          { $project: { _id: 0, from: '$_id.from', to: '$_id.to', amount: 1 } },
+        ],
         // Computed here rather than on the client, which only holds the most
         // recent page of sessions and would undercount once history grows.
         monthly: [{ $group: { _id: MONTH_KEY_EXPRESSION, value: { $sum: '$total' } } }],
@@ -85,6 +118,16 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
       $facet: {
         out: [{ $group: { _id: '$fromUser', value: { $sum: '$amount' } } }],
         received: [{ $group: { _id: '$toUser', value: { $sum: '$amount' } } }],
+        // A settlement from A to B cancels the direct A -> B balance.
+        direct: [
+          {
+            $group: {
+              _id: { from: '$toUser', to: '$fromUser' },
+              amount: { $sum: '$amount' },
+            },
+          },
+          { $project: { _id: 0, from: '$_id.from', to: '$_id.to', amount: 1 } },
+        ],
         count: [{ $count: 'value' }],
       },
     },
@@ -92,6 +135,14 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
 
   const toMap = (rows: { _id: string; value: number }[] | undefined): Totals =>
     Object.fromEntries((rows ?? []).filter(row => row._id).map(row => [row._id, row.value]));
+  const toPairwiseEntries = (rows: unknown[] | undefined): PairwiseEntry[] =>
+    (rows ?? []).flatMap(row => {
+      const value = row as { from?: unknown; to?: unknown; amount?: unknown };
+      const amount = Number(value.amount);
+      const from = String(value.from ?? '');
+      const to = String(value.to ?? '');
+      return from && to && Number.isFinite(amount) ? [{ from, to, amount }] : [];
+    });
 
   const totals = sessionFacets?.totals?.[0] ?? {};
   const thisMonth = monthKeyOf();
@@ -108,6 +159,10 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
 
   return {
     balances,
+    directTransfers: netPairwiseTransfers([
+      ...toPairwiseEntries(sessionFacets?.direct),
+      ...toPairwiseEntries(settlementFacets?.direct),
+    ]),
     transfers: minimalTransfers(balances),
     totals: {
       groupTotal: totals.groupTotal ?? 0,
@@ -288,6 +343,7 @@ export const groupRoutes = [
       now,
       group: groupDto(group),
       balances: ledger.balances,
+      directTransfers: ledger.directTransfers,
       transfers: ledger.transfers,
       totals: ledger.totals,
       sessions: sessions.map(sessionDto),

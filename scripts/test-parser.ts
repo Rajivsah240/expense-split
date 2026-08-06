@@ -6,7 +6,14 @@
  */
 
 import { parseExpenseText, createResolver } from '../shared/parser.js';
-import { splitEvenly, computeBalances, minimalTransfers, parseAmount, sumValues } from '../shared/money.js';
+import {
+  splitEvenly,
+  computeBalances,
+  computeDirectTransfers,
+  minimalTransfers,
+  parseAmount,
+  sumValues,
+} from '../shared/money.js';
 import type { ParserMember } from '../shared/parser.js';
 
 const RAJIV = 'u_rajiv';
@@ -200,6 +207,45 @@ const afterSettling = computeBalances(
   transfers.map(t => ({ fromUser: t.from, toUser: t.to, amount: t.amount }))
 );
 check('fully settled after transfers', afterSettling.every(entry => entry.net === 0), JSON.stringify(afterSettling));
+
+// Direct balances must retain the person who actually paid. The optimized plan
+// may correctly collapse Rajiv -> Bastav -> Ashutosh into one Rajiv -> Ashutosh
+// payment, but the home breakdown should still show the Bastav-paid expense.
+const directSessions: { paidBy: string; total: number; shares: Record<string, number> }[] = [
+  {
+    paidBy: ASHUTOSH,
+    total: 12000,
+    shares: { [RAJIV]: 10000, [BASTAV]: 2000 },
+  },
+  {
+    paidBy: BASTAV,
+    total: 2000,
+    shares: { [RAJIV]: 2000 },
+  },
+];
+const directBalances = computeDirectTransfers(directSessions, []);
+check(
+  'direct balances preserve the payer',
+  JSON.stringify(directBalances) ===
+    JSON.stringify([
+      { from: BASTAV, to: ASHUTOSH, amount: 2000 },
+      { from: RAJIV, to: ASHUTOSH, amount: 10000 },
+      { from: RAJIV, to: BASTAV, amount: 2000 },
+    ]),
+  JSON.stringify(directBalances)
+);
+const directAfterPayment = computeDirectTransfers(directSessions, [
+  { fromUser: RAJIV, toUser: BASTAV, amount: 2000 },
+]);
+check(
+  'direct settlement clears only that payer balance',
+  JSON.stringify(directAfterPayment) ===
+    JSON.stringify([
+      { from: BASTAV, to: ASHUTOSH, amount: 2000 },
+      { from: RAJIV, to: ASHUTOSH, amount: 10000 },
+    ]),
+  JSON.stringify(directAfterPayment)
+);
 
 // ── Resolver direct cases ────────────────────────────────────────────────────
 const { resolve } = createResolver({ members, payerId: RAJIV });

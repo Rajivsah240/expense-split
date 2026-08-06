@@ -87,6 +87,68 @@ export function aggregateShares(items: { shares: Record<string, Paise> }[]): Rec
 
 export type Totals = Record<string, Paise>;
 
+/** A debt or credit between two specific members. */
+export interface PairwiseEntry {
+  from: string;
+  to: string;
+  amount: Paise;
+}
+
+/**
+ * Net a list of directed amounts without routing money through unrelated
+ * members. A positive entry means `from` owes `to`; an entry in the opposite
+ * direction cancels it first. This is useful for showing the person who
+ * actually paid for an expense, alongside the optional minimum-payment plan.
+ */
+export function netPairwiseTransfers(entries: PairwiseEntry[]): Transfer[] {
+  const pairs = new Map<string, { first: string; second: string; amount: Paise }>();
+
+  for (const entry of entries) {
+    const from = String(entry.from ?? '');
+    const to = String(entry.to ?? '');
+    const amount = Math.round(entry.amount);
+    if (!from || !to || from === to || !Number.isFinite(amount) || amount === 0) continue;
+
+    const [first, second] = from < to ? [from, to] : [to, from];
+    const key = `${first}\u0000${second}`;
+    const pair = pairs.get(key) ?? { first, second, amount: 0 };
+    pair.amount += from === first ? amount : -amount;
+    pairs.set(key, pair);
+  }
+
+  return [...pairs.values()]
+    .filter(pair => pair.amount !== 0)
+    .map(pair =>
+      pair.amount > 0
+        ? { from: pair.first, to: pair.second, amount: pair.amount }
+        : { from: pair.second, to: pair.first, amount: -pair.amount }
+    )
+    .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+}
+
+/**
+ * Direct balances retain the payer-to-owner relationship from every expense.
+ * Settlements reverse that relationship, so a payment from A to B reduces the
+ * direct balance from A to B.
+ */
+export function computeDirectTransfers(
+  sessions: Pick<Session, 'paidBy' | 'shares'>[],
+  settlements: Pick<Settlement, 'fromUser' | 'toUser' | 'amount'>[]
+): Transfer[] {
+  const entries: PairwiseEntry[] = [];
+
+  for (const session of sessions) {
+    for (const [ownerId, amount] of Object.entries(session.shares ?? {})) {
+      if (ownerId !== session.paidBy) entries.push({ from: ownerId, to: session.paidBy, amount });
+    }
+  }
+  for (const settlement of settlements) {
+    entries.push({ from: settlement.toUser, to: settlement.fromUser, amount: settlement.amount });
+  }
+
+  return netPairwiseTransfers(entries);
+}
+
 /**
  * The single definition of a member's ledger position. Both the in-memory path
  * (computeBalances) and the database aggregation path feed into this, so the two

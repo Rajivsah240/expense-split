@@ -104,7 +104,7 @@ export function SettleSheet({
       onClose={onClose}
       size="tall"
       title="Settle up"
-      subtitle="The fewest payments that clear all balances."
+      subtitle="The fewest payments that clear all balances. Direct payer balances stay visible on Home."
     >
       <div className="space-y-5">
         <section>

@@ -16,26 +16,31 @@ interface HomeTabProps {
 }
 
 export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, onSeeAll }: HomeTabProps) {
-  const { balances, transfers, totals, sessions, members, nameOf } = state;
+  const { balances, directTransfers, transfers, totals, sessions, members, nameOf } = state;
   const mine = balances.find(entry => entry.userId === currentUserId);
   const net = mine?.net ?? 0;
 
+  // This is the optional minimum-payment plan. It can combine an amount paid
+  // by one flatmate into a payment to another flatmate who is owed more.
   const myTransfers = transfers.filter(
+    transfer => transfer.from === currentUserId || transfer.to === currentUserId
+  );
+  const myDirectTransfers = directTransfers.filter(
     transfer => transfer.from === currentUserId || transfer.to === currentUserId
   );
 
   /**
-   * Your position against each other member, never against yourself.
-   * Derived from the settlement plan, so the figure shown is the amount actually
-   * to be handed over rather than a pairwise sum nobody will ever pay.
+   * Your direct position against each other member, never against yourself.
+   * Unlike the optimized settlement plan, this keeps the person who paid for
+   * each expense visible in the balance breakdown.
    */
   const withOthers = members
     .filter(member => member.userId !== currentUserId)
     .map(member => {
-      const owedByMe = myTransfers
+      const owedByMe = myDirectTransfers
         .filter(transfer => transfer.from === currentUserId && transfer.to === member.userId)
         .reduce((sum, transfer) => sum + transfer.amount, 0);
-      const owedToMe = myTransfers
+      const owedToMe = myDirectTransfers
         .filter(transfer => transfer.to === currentUserId && transfer.from === member.userId)
         .reduce((sum, transfer) => sum + transfer.amount, 0);
       return { member, amount: owedToMe - owedByMe };
@@ -78,6 +83,7 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
 
         {myTransfers.length > 0 ? (
           <div className="space-y-2 border-t border-line bg-surface-2/60 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-faint">Simplified payments</p>
             {myTransfers.slice(0, 3).map((transfer, index) => {
               const iPay = transfer.from === currentUserId;
               return (
@@ -113,7 +119,7 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
           the headline above already is your balance, and you cannot owe yourself. */}
       {withOthers.length > 0 && totals.sessionCount > 0 && (
         <section>
-          <SectionTitle>Between you and each flatmate</SectionTitle>
+          <SectionTitle>Directly between you and each flatmate</SectionTitle>
           <ul className="card divide-y divide-line p-0">
             {withOthers.map(({ member, amount }) => (
               <li key={member.userId} className="flex items-center gap-3 px-3.5 py-3">
@@ -138,6 +144,10 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
               </li>
             ))}
           </ul>
+          <p className="mt-2 px-1 text-[11.5px] leading-relaxed text-faint">
+            These balances keep the original payer visible. The simplified plan above can combine payments to
+            reduce the number of transfers.
+          </p>
         </section>
       )}
 
