@@ -117,7 +117,7 @@ export function WhatsappImportSheet({
     try {
       for (let index = 0; index < selected.length; index += 1) {
         const entry = selected[index];
-        setProgress(`Saving trip ${index + 1} of ${selected.length}…`);
+        setProgress(`Saving session ${index + 1} of ${selected.length}…`);
         const payload = entry.items
           .map(item => ({
             name: item.name.trim(),
@@ -143,13 +143,13 @@ export function WhatsappImportSheet({
       }
 
       onImported(saved);
-      toast(`Imported ${saved.length} shopping trip${saved.length === 1 ? '' : 's'}.`, 'success');
+      toast(`Imported ${saved.length} shopping session${saved.length === 1 ? '' : 's'}.`, 'success');
       onClose();
       reset();
     } catch (caught) {
       setError(
         `${caught instanceof Error ? caught.message : 'Import failed.'}${
-          saved.length ? ` ${saved.length} trip(s) were already saved.` : ''
+          saved.length ? ` ${saved.length} session(s) were already saved.` : ''
         }`
       );
       if (saved.length) onImported(saved);
@@ -168,7 +168,7 @@ export function WhatsappImportSheet({
       }}
       size="tall"
       title="Import from WhatsApp"
-      subtitle={proposals ? `${proposals.length} shopping trip${proposals.length === 1 ? '' : 's'} found` : group.name}
+      subtitle={proposals ? `${proposals.length} shopping session${proposals.length === 1 ? '' : 's'} found` : group.name}
       footer={
         proposals ? (
           <Button
@@ -181,7 +181,7 @@ export function WhatsappImportSheet({
             {progress ||
               (summary.blocking > 0
                 ? `Fix ${summary.blocking} item${summary.blocking === 1 ? '' : 's'} to import`
-                : `Import ${summary.count} trip${summary.count === 1 ? '' : 's'} · ${formatMoney(summary.total)}`)}
+                : `Import ${summary.count} session${summary.count === 1 ? '' : 's'} · ${formatMoney(summary.total)}`)}
           </Button>
         ) : (
           <Button
@@ -230,7 +230,7 @@ export function WhatsappImportSheet({
                     type="button"
                     onClick={() => update(entry.key, { include: !entry.include })}
                     aria-pressed={entry.include}
-                    aria-label={entry.include ? 'Exclude this trip' : 'Include this trip'}
+                    aria-label={entry.include ? 'Exclude this session' : 'Include this session'}
                     className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[7px] border transition-colors ${
                       entry.include ? 'border-brand bg-brand text-white' : 'border-line-strong bg-surface'
                     }`}
@@ -241,7 +241,7 @@ export function WhatsappImportSheet({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="clip text-[14px] font-bold text-ink">
-                        {entry.shop || 'Shopping trip'}
+                        {entry.shop || 'Shopping session'}
                       </span>
                       {validity.blocking > 0 && (
                         <Tag tone="warn">

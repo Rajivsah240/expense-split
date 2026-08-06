@@ -111,7 +111,7 @@ export function GroupsScreen({
                         <>
                           {' · '}
                           <span className="tnum">{formatMoneyShort(group.summary.groupTotal)}</span> across{' '}
-                          {group.summary.sessionCount} trip{group.summary.sessionCount === 1 ? '' : 's'}
+                          {group.summary.sessionCount} session{group.summary.sessionCount === 1 ? '' : 's'}
                         </>
                       )}
                     </span>
@@ -196,7 +196,7 @@ function CreateGroupSheet({
       open={open}
       onClose={onClose}
       title="New group"
-      subtitle="A flat, a trip, an office lunch — anything you split."
+      subtitle="A flat, a holiday, an office lunch — anything you split."
       footer={
         <Button size="lg" block loading={busy} disabled={!name.trim()} onClick={() => void submit()}>
           Create group

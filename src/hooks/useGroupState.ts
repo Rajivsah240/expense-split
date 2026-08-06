@@ -42,6 +42,7 @@ export interface GroupData {
 
 const EMPTY_TOTALS: GroupState['totals'] = {
   groupTotal: 0,
+  monthTotal: 0,
   sessionCount: 0,
   itemCount: 0,
   settlementCount: 0,

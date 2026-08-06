@@ -3,7 +3,7 @@ import { ArrowRight, Check, HandCoins, Receipt, TrendingUp } from 'lucide-react'
 import type { Session } from '@shared/types';
 import { SessionCard } from '../components/SessionCard';
 import { Avatar, Button, EmptyState, SectionTitle, Tag } from '../components/ui';
-import { formatMoney, formatMoneyShort } from '../lib/format';
+import { formatMoney } from '../lib/format';
 import type { GroupStateApi } from '../hooks/useGroupState';
 
 interface HomeTabProps {
@@ -20,17 +20,26 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
   const mine = balances.find(entry => entry.userId === currentUserId);
   const net = mine?.net ?? 0;
 
-  const monthTotal = sessions
-    .filter(session => {
-      const date = new Date(session.date);
-      const now = new Date();
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-    })
-    .reduce((sum, session) => sum + session.total, 0);
-
   const myTransfers = transfers.filter(
     transfer => transfer.from === currentUserId || transfer.to === currentUserId
   );
+
+  /**
+   * Your position against each other member, never against yourself.
+   * Derived from the settlement plan, so the figure shown is the amount actually
+   * to be handed over rather than a pairwise sum nobody will ever pay.
+   */
+  const withOthers = members
+    .filter(member => member.userId !== currentUserId)
+    .map(member => {
+      const owedByMe = myTransfers
+        .filter(transfer => transfer.from === currentUserId && transfer.to === member.userId)
+        .reduce((sum, transfer) => sum + transfer.amount, 0);
+      const owedToMe = myTransfers
+        .filter(transfer => transfer.to === currentUserId && transfer.from === member.userId)
+        .reduce((sum, transfer) => sum + transfer.amount, 0);
+      return { member, amount: owedToMe - owedByMe };
+    });
 
   return (
     <div className="space-y-5">
@@ -53,10 +62,16 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
             {formatMoney(Math.abs(net))}
           </p>
 
+          {/*
+            Every term that feeds the headline is listed, so the arithmetic can be
+            checked on screen: paid − share + paid-back − received = the number above.
+            Leaving the settlement terms out made correct balances look wrong.
+          */}
           {mine && (mine.paid > 0 || mine.owed > 0) && (
-            <p className="mt-2 text-[12.5px] text-muted tnum">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-muted tnum">
               You paid {formatMoney(mine.paid)} · your share {formatMoney(mine.owed)}
-              {mine.settledOut > 0 && ` · settled ${formatMoney(mine.settledOut)}`}
+              {mine.settledOut > 0 && ` · you paid back ${formatMoney(mine.settledOut)}`}
+              {mine.settledIn > 0 && ` · you received ${formatMoney(mine.settledIn)}`}
             </p>
           )}
         </div>
@@ -94,38 +109,34 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
         )}
       </motion.section>
 
-      {/* Per-member positions */}
-      {members.length > 1 && totals.sessionCount > 0 && (
+      {/* Your position with each flatmate. Your own row is deliberately absent —
+          the headline above already is your balance, and you cannot owe yourself. */}
+      {withOthers.length > 0 && totals.sessionCount > 0 && (
         <section>
-          <SectionTitle>Who owes whom</SectionTitle>
+          <SectionTitle>Between you and each flatmate</SectionTitle>
           <ul className="card divide-y divide-line p-0">
-            {balances
-              .filter(entry => members.some(member => member.userId === entry.userId) || entry.net !== 0)
-              .map(entry => (
-                <li key={entry.userId} className="flex items-center gap-3 px-3.5 py-3">
-                  <Avatar name={nameOf(entry.userId)} userId={entry.userId} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <p className="clip text-[13.5px] font-semibold text-ink">
-                      {entry.userId === currentUserId ? 'You' : nameOf(entry.userId)}
-                    </p>
-                    <p className="text-[11.5px] text-faint tnum">
-                      paid {formatMoneyShort(entry.paid)} · share {formatMoneyShort(entry.owed)}
-                    </p>
-                  </div>
-                  {entry.net === 0 ? (
-                    <Tag tone="neutral">settled</Tag>
-                  ) : (
-                    <span
-                      className={`text-[13.5px] font-bold tnum ${
-                        entry.net > 0 ? 'text-positive' : 'text-negative'
-                      }`}
-                    >
-                      {entry.net > 0 ? '+' : '−'}
-                      {formatMoney(Math.abs(entry.net))}
-                    </span>
-                  )}
-                </li>
-              ))}
+            {withOthers.map(({ member, amount }) => (
+              <li key={member.userId} className="flex items-center gap-3 px-3.5 py-3">
+                <Avatar name={member.displayName} userId={member.userId} size={32} />
+                <div className="min-w-0 flex-1">
+                  <p className="clip text-[13.5px] font-semibold text-ink">{member.displayName}</p>
+                  <p className="text-[11.5px] text-faint">
+                    {amount < 0 ? 'you owe them' : amount > 0 ? 'they owe you' : 'nothing outstanding'}
+                  </p>
+                </div>
+                {amount === 0 ? (
+                  <Tag tone="neutral">settled</Tag>
+                ) : (
+                  <span
+                    className={`text-[13.5px] font-bold tnum ${
+                      amount > 0 ? 'text-positive' : 'text-negative'
+                    }`}
+                  >
+                    {formatMoney(Math.abs(amount))}
+                  </span>
+                )}
+              </li>
+            ))}
           </ul>
         </section>
       )}
@@ -138,7 +149,9 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
               <TrendingUp className="size-3.5" />
               This month
             </p>
-            <p className="mt-1 text-[19px] font-extrabold text-ink tnum">{formatMoney(monthTotal)}</p>
+            <p className="mt-1 text-[19px] font-extrabold text-ink tnum">
+              {formatMoney(totals.monthTotal)}
+            </p>
           </div>
           <div className="card-flat p-3.5">
             <p className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-[0.06em] text-faint">
@@ -147,7 +160,7 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
             </p>
             <p className="mt-1 text-[19px] font-extrabold text-ink tnum">{formatMoney(totals.groupTotal)}</p>
             <p className="mt-0.5 text-[11.5px] text-faint">
-              {totals.sessionCount} trip{totals.sessionCount === 1 ? '' : 's'} · {totals.itemCount} items
+              {totals.sessionCount} session{totals.sessionCount === 1 ? '' : 's'} · {totals.itemCount} items
             </p>
           </div>
         </section>

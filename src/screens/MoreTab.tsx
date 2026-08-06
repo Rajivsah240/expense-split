@@ -35,9 +35,9 @@ import {
 import type { GroupStateApi } from '../hooks/useGroupState';
 
 const PREF_LABELS: { key: keyof NotificationPrefs; label: string; hint: string }[] = [
-  { key: 'sessionCreated', label: 'New expenses', hint: 'When someone records a shopping trip' },
+  { key: 'sessionCreated', label: 'New expenses', hint: 'When someone records a shopping session' },
   { key: 'sessionEdited', label: 'Edits', hint: 'When an item, price or owner changes' },
-  { key: 'sessionDeleted', label: 'Deletions', hint: 'When a trip is removed and balances shift' },
+  { key: 'sessionDeleted', label: 'Deletions', hint: 'When a session is removed and balances shift' },
   { key: 'settlementRecorded', label: 'Settlements', hint: 'When a payment is marked as done' },
   { key: 'memberChanged', label: 'Members', hint: 'When people join, leave or the group is renamed' },
 ];

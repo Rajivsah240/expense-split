@@ -243,7 +243,7 @@ ${roster(input.members)}
 
 Your job:
 1. Ignore ordinary conversation. Only messages that record a purchase matter.
-2. Group the expense messages into shopping sessions. Messages from the same sender within the same shopping trip (usually consecutive, same day) belong to one session.
+2. Group the expense messages into shopping sessions. Messages from the same sender within the same shopping session (usually consecutive, same day) belong to one session.
 3. For each session return the date as YYYY-MM-DD (from the message timestamp when present, otherwise an empty string), the shop name if mentioned, and who paid.
 4. The payer is the person who sent the messages. Map their WhatsApp name to a userId from the list above and also return the raw name you saw. If you cannot map them, use payerId "" and still fill payerName.
 5. Extract the line items for each session.

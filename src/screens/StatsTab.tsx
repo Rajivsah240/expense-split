@@ -71,7 +71,7 @@ export function StatsTab({ groupId, members, revision }: StatsTabProps) {
       <EmptyState
         icon={<BarChart3 className="size-6" />}
         title="No insights yet"
-        body="Once you've recorded a few shopping trips, monthly trends, category splits and per-person figures show up here."
+        body="Once you've recorded a few shopping sessions, monthly trends, category splits and per-person figures show up here."
       />
     );
   }

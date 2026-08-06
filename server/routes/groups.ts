@@ -26,6 +26,7 @@ import {
   type GroupDoc,
 } from '../models.js';
 import { displayNameOf, memberName, requireGroup, requireOwner } from './shared.js';
+import { MONTH_KEY_EXPRESSION, monthKeyOf } from '../time.js';
 
 const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SNAPSHOT_SESSIONS = 60;
@@ -59,6 +60,9 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
           { $unwind: '$pairs' },
           { $group: { _id: '$pairs.k', value: { $sum: '$pairs.v' } } },
         ],
+        // Computed here rather than on the client, which only holds the most
+        // recent page of sessions and would undercount once history grows.
+        monthly: [{ $group: { _id: MONTH_KEY_EXPRESSION, value: { $sum: '$total' } } }],
         totals: [
           {
             $group: {
@@ -90,6 +94,10 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
     Object.fromEntries((rows ?? []).filter(row => row._id).map(row => [row._id, row.value]));
 
   const totals = sessionFacets?.totals?.[0] ?? {};
+  const thisMonth = monthKeyOf();
+  const monthTotal =
+    (sessionFacets?.monthly ?? []).find((row: { _id: string }) => row._id === thisMonth)?.value ?? 0;
+
   const balances = balancesFromTotals(
     memberIds,
     toMap(sessionFacets?.paid),
@@ -103,6 +111,7 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
     transfers: minimalTransfers(balances),
     totals: {
       groupTotal: totals.groupTotal ?? 0,
+      monthTotal,
       sessionCount: totals.sessionCount ?? 0,
       itemCount: totals.itemCount ?? 0,
       settlementCount: settlementFacets?.count?.[0]?.value ?? 0,

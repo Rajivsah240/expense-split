@@ -8,25 +8,9 @@ import type { GroupStats, StatsBucket } from '../../shared/types.js';
 import { ok, route, toNumber } from '../http.js';
 import { SessionModel } from '../models.js';
 import { memberName, requireGroup } from './shared.js';
+import { MONTH_KEY_EXPRESSION, STATS_TIMEZONE, monthLabel, recentMonthKeys } from '../time.js';
 
-const TZ = process.env.STATS_TIMEZONE || 'Asia/Kolkata';
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-const monthLabel = (key: string): string => {
-  const [year, month] = key.split('-').map(Number);
-  return new Date(year, (month || 1) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-};
-
-/** Fill in the months with no spending so the chart has an unbroken axis. */
-function monthSeries(months: number): string[] {
-  const keys: string[] = [];
-  const now = new Date();
-  for (let offset = months - 1; offset >= 0; offset -= 1) {
-    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    keys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
-  }
-  return keys;
-}
 
 export const statsRoutes = [
   route('GET', 'groups/:groupId/stats', async ctx => {
@@ -34,29 +18,26 @@ export const statsRoutes = [
     const groupId = group._id.toString();
     const months = Math.min(24, Math.max(3, toNumber(ctx.query.months, 6)));
 
-    const keys = monthSeries(months);
-    const since = new Date();
-    since.setMonth(since.getMonth() - (months - 1), 1);
-    since.setHours(0, 0, 0, 0);
-
-    const monthOf = { $dateToString: { format: '%Y-%m', date: { $toDate: '$date' }, timezone: TZ } };
+    // Axis and buckets are both derived in STATS_TIMEZONE so they always line up.
+    const keys = recentMonthKeys(months);
+    const monthOf = MONTH_KEY_EXPRESSION;
+    // Filter by the month key rather than a timestamp, so the window boundary
+    // uses exactly the same zone as the bucketing.
+    const withinWindow = { $expr: { $gte: [monthOf, keys[0]] } };
 
     const [sessionFacets] = await SessionModel.aggregate([
       { $match: { groupId, deletedAt: null } },
       {
         $facet: {
-          monthly: [
-            { $match: { date: { $gte: since.getTime() } } },
-            { $group: { _id: monthOf, value: { $sum: '$total' } } },
-          ],
+          monthly: [{ $match: withinWindow }, { $group: { _id: monthOf, value: { $sum: '$total' } } }],
           contribution: [
-            { $match: { date: { $gte: since.getTime() } } },
+            { $match: withinWindow },
             { $group: { _id: { month: monthOf, userId: '$paidBy' }, value: { $sum: '$total' } } },
           ],
           weekday: [
             {
               $group: {
-                _id: { $dayOfWeek: { date: { $toDate: '$date' }, timezone: TZ } },
+                _id: { $dayOfWeek: { date: { $toDate: '$date' }, timezone: STATS_TIMEZONE } },
                 value: { $sum: 1 },
               },
             },

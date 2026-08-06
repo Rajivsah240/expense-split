@@ -194,7 +194,7 @@ export function HistoryTab({ groupId, members, currentUserId, revision, onOpenSe
         <p className="px-1 text-[12.5px] text-muted">
           {sessions.length === 0
             ? 'No matches'
-            : `${sessions.length}${cursor ? '+' : ''} trip${sessions.length === 1 ? '' : 's'} · `}
+            : `${sessions.length}${cursor ? '+' : ''} session${sessions.length === 1 ? '' : 's'} · `}
           {sessions.length > 0 && <span className="font-bold text-ink tnum">{formatMoney(shownTotal)}</span>}
         </p>
       )}
@@ -251,7 +251,7 @@ export function HistoryTab({ groupId, members, currentUserId, revision, onOpenSe
 
           {cursor && (
             <Button variant="secondary" block loading={loadingMore} onClick={() => void loadMore()}>
-              Load older trips
+              Load older sessions
             </Button>
           )}
         </div>

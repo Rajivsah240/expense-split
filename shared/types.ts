@@ -191,6 +191,8 @@ export interface GroupState {
   transfers: Transfer[];
   totals: {
     groupTotal: Paise;
+    /** Current calendar month, bucketed server-side in the group's timezone. */
+    monthTotal: Paise;
     sessionCount: number;
     itemCount: number;
     settlementCount: number;

@@ -18,6 +18,7 @@ import {
   MessageSquareText,
   ScanLine,
   Sparkles,
+  Wallet,
   Wand2,
   X,
 } from 'lucide-react';
@@ -61,6 +62,7 @@ export function AddSheet({
 }: AddSheetProps) {
   const toast = useToast();
   const allIds = useMemo(() => members.map(member => member.userId), [members]);
+  const myName = members.find(member => member.userId === currentUserId)?.displayName ?? 'You';
 
   const [mode, setMode] = useState<Mode>('paste');
   const [stage, setStage] = useState<Stage>('input');
@@ -77,9 +79,7 @@ export function AddSheet({
   const [shop, setShop] = useState('');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(toDateInput(Date.now()));
-  const [paidBy, setPaidBy] = useState(currentUserId);
   const [usedAi, setUsedAi] = useState(false);
-  const [payerHint, setPayerHint] = useState<Member | null>(null);
 
   const reset = () => {
     setMode('paste');
@@ -93,9 +93,7 @@ export function AddSheet({
     setShop('');
     setNotes('');
     setDate(toDateInput(Date.now()));
-    setPaidBy(currentUserId);
     setUsedAi(false);
-    setPayerHint(null);
   };
 
   useEffect(() => {
@@ -119,18 +117,10 @@ export function AddSheet({
       // On-device first. Most WhatsApp-style lists never need the network.
       const local = parseExpenseText(trimmed, {
         members,
-        payerId: paidBy,
+        payerId: currentUserId,
         assumeSharedWhenUnspecified: group.settings.assumeSharedWhenUnspecified,
       });
 
-      if (local.senderHint) {
-        const hinted = members.find(
-          member =>
-            member.displayName.toLowerCase() === local.senderHint.toLowerCase() ||
-            member.displayName.toLowerCase().split(' ')[0] === local.senderHint.toLowerCase().split(' ')[0]
-        );
-        setPayerHint(hinted && hinted.userId !== paidBy ? hinted : null);
-      }
 
       if (isConfident(local)) {
         setItems(
@@ -154,7 +144,7 @@ export function AddSheet({
       setBusyLabel('Reading it with AI…');
       const result = await api<{ shop: string; items: DraftItem[]; usedAi: boolean; warning?: string }>(
         `groups/${group.id}/ai/text`,
-        { method: 'POST', body: { text: trimmed, payerId: paidBy } }
+        { method: 'POST', body: { text: trimmed, payerId: currentUserId } }
       );
 
       if (result.items.length === 0) {
@@ -194,7 +184,7 @@ export function AddSheet({
     try {
       const result = await api<{ shop: string; date: string; items: DraftItem[] }>(
         `groups/${group.id}/ai/receipt`,
-        { method: 'POST', body: { imageBase64: image.dataUrl, mimeType: image.mimeType, payerId: paidBy } }
+        { method: 'POST', body: { imageBase64: image.dataUrl, mimeType: image.mimeType, payerId: currentUserId } }
       );
 
       if (result.items.length === 0) {
@@ -236,7 +226,7 @@ export function AddSheet({
           date,
           shop: shop.trim(),
           notes: notes.trim(),
-          paidBy,
+          paidBy: currentUserId,
           items: payload,
           source: mode === 'manual' ? 'manual' : mode === 'photo' ? 'receipt' : 'text',
         },
@@ -366,7 +356,7 @@ export function AddSheet({
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13.5px] font-bold text-ink">Import a whole chat</span>
                     <span className="block text-[12px] text-muted">
-                      Paste days of WhatsApp messages and get grouped shopping trips.
+                      Paste days of WhatsApp messages and get grouped shopping sessions.
                     </span>
                   </span>
                 </button>
@@ -429,13 +419,7 @@ export function AddSheet({
               </div>
             )}
 
-            <PayerAndDate
-              members={members}
-              paidBy={paidBy}
-              onPaidBy={setPaidBy}
-              date={date}
-              onDate={setDate}
-            />
+            <PayerAndDate payerName={myName} date={date} onDate={setDate} />
 
             {busyLabel && (
               <div className="flex items-center justify-center gap-2 py-1 text-[13px] font-medium text-muted">
@@ -465,31 +449,10 @@ export function AddSheet({
               </div>
             )}
 
-            {payerHint && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPaidBy(payerHint.userId);
-                  setPayerHint(null);
-                }}
-                className="flex w-full items-center justify-between gap-2 rounded-xl border border-brand-line bg-brand-soft px-3.5 py-2.5 text-left"
-              >
-                <span className="text-[12.5px] font-medium text-brand-dark">
-                  These messages look like they're from <b>{payerHint.displayName}</b>.
-                </span>
-                <span className="shrink-0 text-[12.5px] font-bold text-brand-dark underline">Set as payer</span>
-              </button>
-            )}
 
             <DraftEditor items={items} members={members} onChange={setItems} />
 
-            <PayerAndDate
-              members={members}
-              paidBy={paidBy}
-              onPaidBy={setPaidBy}
-              date={date}
-              onDate={setDate}
-            />
+            <PayerAndDate payerName={myName} date={date} onDate={setDate} />
 
             <div className="grid grid-cols-1 gap-3">
               <Field label="Shop (optional)">
@@ -550,29 +513,26 @@ function ModeButton({
   );
 }
 
+/**
+ * You are always the payer for anything you add — everyone records their own
+ * purchases, so there is no picker to get wrong. The payer is shown, not chosen.
+ */
 export function PayerAndDate({
-  members,
-  paidBy,
-  onPaidBy,
+  payerName,
   date,
   onDate,
 }: {
-  members: Member[];
-  paidBy: string;
-  onPaidBy: (userId: string) => void;
+  payerName: string;
   date: string;
   onDate: (date: string) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <Field label="Paid by">
-        <select value={paidBy} onChange={event => onPaidBy(event.target.value)} className="field">
-          {members.map(member => (
-            <option key={member.userId} value={member.userId}>
-              {member.displayName}
-            </option>
-          ))}
-        </select>
+        <div className="field flex items-center gap-2 bg-surface-2 text-muted">
+          <Wallet className="size-4 shrink-0 text-faint" />
+          <span className="truncate font-semibold text-ink">{payerName}</span>
+        </div>
       </Field>
       <Field label="Date">
         <input

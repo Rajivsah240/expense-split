@@ -44,7 +44,6 @@ export function SessionSheet({
   const [shop, setShop] = useState('');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState('');
-  const [paidBy, setPaidBy] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -55,7 +54,6 @@ export function SessionSheet({
     setShop(session.shop);
     setNotes(session.notes);
     setDate(toDateInput(session.date));
-    setPaidBy(session.paidBy);
     setItems(
       session.items.map(item => ({
         id: item.id,
@@ -90,7 +88,7 @@ export function SessionSheet({
 
       const result = await api<{ session: Session; unchanged?: boolean }>(
         `groups/${group.id}/sessions/${session.id}`,
-        { method: 'PATCH', body: { date, shop: shop.trim(), notes: notes.trim(), paidBy, items: payload } }
+        { method: 'PATCH', body: { date, shop: shop.trim(), notes: notes.trim(), items: payload } }
       );
 
       onUpdated(result.session);
@@ -175,7 +173,7 @@ export function SessionSheet({
       {!session ? null : editing ? (
         <div className="space-y-4">
           <DraftEditor items={items} members={members} onChange={setItems} />
-          <PayerAndDate members={members} paidBy={paidBy} onPaidBy={setPaidBy} date={date} onDate={setDate} />
+          <PayerAndDate payerName={session.paidByName || 'Member'} date={date} onDate={setDate} />
           <Field label="Shop">
             <input
               type="text"
@@ -223,7 +221,7 @@ export function SessionSheet({
 
           {myShare > 0 && (
             <div className="flex items-center justify-between rounded-xl border border-brand-line bg-brand-soft px-3.5 py-2.5">
-              <span className="text-[13px] font-semibold text-brand-dark">Your share of this trip</span>
+              <span className="text-[13px] font-semibold text-brand-dark">Your share of this session</span>
               <span className="text-[15px] font-extrabold text-brand-dark tnum">{formatMoney(myShare)}</span>
             </div>
           )}
