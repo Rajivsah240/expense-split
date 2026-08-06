@@ -357,7 +357,10 @@ export const groupRoutes = [
       full,
     };
 
-    return ok(state);
+    // Cached PWA clients from the previous release still render this field.
+    // Keep it in sync with the sole direct transfer list during the rollout so
+    // they cannot display an empty, contradictory second balance view.
+    return ok({ ...state, directTransfers: state.transfers });
   }),
 
   route('PATCH', 'groups/:groupId', async ctx => {

@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { ArrowRight, Check, HandCoins, Receipt, TrendingUp } from 'lucide-react';
 import type { Session } from '@shared/types';
 import { SessionCard } from '../components/SessionCard';
-import { Avatar, Button, EmptyState, SectionTitle, Tag } from '../components/ui';
+import { Avatar, Button, EmptyState, SectionTitle } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import type { GroupStateApi } from '../hooks/useGroupState';
 
@@ -16,7 +16,7 @@ interface HomeTabProps {
 }
 
 export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, onSeeAll }: HomeTabProps) {
-  const { balances, transfers, totals, sessions, members, nameOf } = state;
+  const { balances, transfers, totals, sessions, nameOf } = state;
   const mine = balances.find(entry => entry.userId === currentUserId);
   const net = mine?.net ?? 0;
 
@@ -25,19 +25,6 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
   const myTransfers = transfers.filter(
     transfer => transfer.from === currentUserId || transfer.to === currentUserId
   );
-
-  /** Your position against each other member, never against yourself. */
-  const withOthers = members
-    .filter(member => member.userId !== currentUserId)
-    .map(member => {
-      const owedByMe = myTransfers
-        .filter(transfer => transfer.from === currentUserId && transfer.to === member.userId)
-        .reduce((sum, transfer) => sum + transfer.amount, 0);
-      const owedToMe = myTransfers
-        .filter(transfer => transfer.to === currentUserId && transfer.from === member.userId)
-        .reduce((sum, transfer) => sum + transfer.amount, 0);
-      return { member, amount: owedToMe - owedByMe };
-    });
 
   return (
     <div className="space-y-5">
@@ -111,41 +98,6 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
           </div>
         )}
       </motion.section>
-
-      {/* Your position with each flatmate. Your own row is deliberately absent —
-          the headline above already is your balance, and you cannot owe yourself. */}
-      {withOthers.length > 0 && totals.sessionCount > 0 && (
-        <section>
-          <SectionTitle>Between you and each flatmate</SectionTitle>
-          <ul className="card divide-y divide-line p-0">
-            {withOthers.map(({ member, amount }) => (
-              <li key={member.userId} className="flex items-center gap-3 px-3.5 py-3">
-                <Avatar name={member.displayName} userId={member.userId} size={32} />
-                <div className="min-w-0 flex-1">
-                  <p className="clip text-[13.5px] font-semibold text-ink">{member.displayName}</p>
-                  <p className="text-[11.5px] text-faint">
-                    {amount < 0 ? 'you owe them' : amount > 0 ? 'they owe you' : 'nothing outstanding'}
-                  </p>
-                </div>
-                {amount === 0 ? (
-                  <Tag tone="neutral">settled</Tag>
-                ) : (
-                  <span
-                    className={`text-[13.5px] font-bold tnum ${
-                      amount > 0 ? 'text-positive' : 'text-negative'
-                    }`}
-                  >
-                    {formatMoney(Math.abs(amount))}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 px-1 text-[11.5px] leading-relaxed text-faint">
-            Each payment stays with the flatmate involved. Balances are not routed through anyone else.
-          </p>
-        </section>
-      )}
 
       {/* Group totals */}
       {totals.sessionCount > 0 && (
