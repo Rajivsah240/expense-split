@@ -97,8 +97,8 @@ export interface PairwiseEntry {
 /**
  * Net a list of directed amounts without routing money through unrelated
  * members. A positive entry means `from` owes `to`; an entry in the opposite
- * direction cancels it first. This is useful for showing the person who
- * actually paid for an expense, alongside the optional minimum-payment plan.
+ * direction cancels it first. It deliberately never routes money through an
+ * unrelated member.
  */
 export function netPairwiseTransfers(entries: PairwiseEntry[]): Transfer[] {
   const pairs = new Map<string, { first: string; second: string; amount: Paise }>();
@@ -216,35 +216,4 @@ export function computeBalances(
   }
 
   return balancesFromTotals(memberIds, paid, owed, settledOut, settledIn);
-}
-
-/**
- * Greedy max-debtor / max-creditor matching. On integer paise this always
- * clears every balance in at most (members - 1) transfers, which is the minimum
- * possible for a connected group.
- */
-export function minimalTransfers(balances: MemberBalance[]): Transfer[] {
-  const debtors = balances
-    .filter(entry => entry.net < 0)
-    .map(entry => ({ userId: entry.userId, amount: -entry.net }))
-    .sort((a, b) => b.amount - a.amount || a.userId.localeCompare(b.userId));
-  const creditors = balances
-    .filter(entry => entry.net > 0)
-    .map(entry => ({ userId: entry.userId, amount: entry.net }))
-    .sort((a, b) => b.amount - a.amount || a.userId.localeCompare(b.userId));
-
-  const transfers: Transfer[] = [];
-  let d = 0;
-  let c = 0;
-  while (d < debtors.length && c < creditors.length) {
-    const debtor = debtors[d];
-    const creditor = creditors[c];
-    const amount = Math.min(debtor.amount, creditor.amount);
-    if (amount > 0) transfers.push({ from: debtor.userId, to: creditor.userId, amount });
-    debtor.amount -= amount;
-    creditor.amount -= amount;
-    if (debtor.amount === 0) d += 1;
-    if (creditor.amount === 0) c += 1;
-  }
-  return transfers;
 }

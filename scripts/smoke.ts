@@ -268,7 +268,12 @@ Rice 300 all`,
 
   const netTotal = state.data.balances.reduce((sum, entry) => sum + entry.net, 0);
   check('balances sum to zero', netTotal === 0, String(netTotal));
-  check('minimum transfers', state.data.transfers.length <= 2, String(state.data.transfers.length));
+  check(
+    'direct transfers retain each original payer',
+    state.data.transfers.some(transfer => transfer.to === rajiv.userId) &&
+      state.data.transfers.some(transfer => transfer.to === ashutosh.userId),
+    JSON.stringify(state.data.transfers)
+  );
   check(
     'group total matches sessions',
     state.data.totals.groupTotal === 137000 + 25000,

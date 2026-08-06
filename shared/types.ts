@@ -188,9 +188,7 @@ export interface GroupState {
   now: number;
   group: Group;
   balances: MemberBalance[];
-  /** Direct, per-person balances that preserve who paid each expense. */
-  directTransfers: Transfer[];
-  /** Minimum-payment plan that may consolidate direct balances across members. */
+  /** Per-person settlement balances; money is never routed through another member. */
   transfers: Transfer[];
   totals: {
     groupTotal: Paise;

@@ -1,7 +1,6 @@
 /**
- * Settlement. The suggested transfers come from the server's minimum-cash-flow
- * calculation; you can only mark one that involves you, which is the rule the
- * product spec asks for.
+ * Settlement. Each suggested payment stays between the member who owes and the
+ * member who paid for the expense; nothing is routed through a third person.
  */
 
 import { useMemo, useState } from 'react';
@@ -104,7 +103,7 @@ export function SettleSheet({
       onClose={onClose}
       size="tall"
       title="Settle up"
-      subtitle="The fewest payments that clear all balances. Direct payer balances stay visible on Home."
+      subtitle="Pay each flatmate directly. Payments are never combined or routed through someone else."
     >
       <div className="space-y-5">
         <section>

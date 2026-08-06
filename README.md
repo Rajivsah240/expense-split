@@ -102,7 +102,7 @@ Vercel egress IPs in Atlas Network Access (or `0.0.0.0/0` for a hobby project).
 ```
 shared/          used by both browser and server — one definition, no drift
   types.ts       every wire shape; money is integer paise throughout
-  money.ts       splitting, balances, minimum-transfer settlement
+  money.ts       splitting, balances, direct member-to-member settlement
   parser.ts      the rule-based parser
   categories.ts  auto-categorisation
 

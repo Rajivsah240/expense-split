@@ -10,7 +10,6 @@ import {
   splitEvenly,
   computeBalances,
   computeDirectTransfers,
-  minimalTransfers,
   parseAmount,
   sumValues,
 } from '../shared/money.js';
@@ -197,30 +196,19 @@ const sessions = [
 ];
 const balances = computeBalances(ALL, sessions, []);
 check('balances sum to zero', balances.reduce((sum, entry) => sum + entry.net, 0) === 0);
-const transfers = minimalTransfers(balances);
-check('transfers clear balances', transfers.reduce((sum, t) => sum + t.amount, 0) === balances.filter(b => b.net > 0).reduce((sum, b) => sum + b.net, 0));
-check('minimal transfer count', transfers.length <= ALL.length - 1, `got ${transfers.length}`);
 
-const afterSettling = computeBalances(
-  ALL,
-  sessions,
-  transfers.map(t => ({ fromUser: t.from, toUser: t.to, amount: t.amount }))
-);
-check('fully settled after transfers', afterSettling.every(entry => entry.net === 0), JSON.stringify(afterSettling));
-
-// Direct balances must retain the person who actually paid. The optimized plan
-// may correctly collapse Rajiv -> Bastav -> Ashutosh into one Rajiv -> Ashutosh
-// payment, but the home breakdown should still show the Bastav-paid expense.
+// Direct balances retain the person who actually paid. Payments are never
+// routed through another member to reduce the number of transfers.
 const directSessions: { paidBy: string; total: number; shares: Record<string, number> }[] = [
   {
     paidBy: ASHUTOSH,
-    total: 12000,
-    shares: { [RAJIV]: 10000, [BASTAV]: 2000 },
+    total: 121768,
+    shares: { [RAJIV]: 102768, [BASTAV]: 19000 },
   },
   {
     paidBy: BASTAV,
-    total: 2000,
-    shares: { [RAJIV]: 2000 },
+    total: 19000,
+    shares: { [RAJIV]: 19000 },
   },
 ];
 const directBalances = computeDirectTransfers(directSessions, []);
@@ -228,24 +216,41 @@ check(
   'direct balances preserve the payer',
   JSON.stringify(directBalances) ===
     JSON.stringify([
-      { from: BASTAV, to: ASHUTOSH, amount: 2000 },
-      { from: RAJIV, to: ASHUTOSH, amount: 10000 },
-      { from: RAJIV, to: BASTAV, amount: 2000 },
+      { from: BASTAV, to: ASHUTOSH, amount: 19000 },
+      { from: RAJIV, to: ASHUTOSH, amount: 102768 },
+      { from: RAJIV, to: BASTAV, amount: 19000 },
     ]),
   JSON.stringify(directBalances)
 );
 const directAfterPayment = computeDirectTransfers(directSessions, [
-  { fromUser: RAJIV, toUser: BASTAV, amount: 2000 },
+  { fromUser: RAJIV, toUser: BASTAV, amount: 19000 },
 ]);
 check(
   'direct settlement clears only that payer balance',
   JSON.stringify(directAfterPayment) ===
     JSON.stringify([
-      { from: BASTAV, to: ASHUTOSH, amount: 2000 },
-      { from: RAJIV, to: ASHUTOSH, amount: 10000 },
+      { from: BASTAV, to: ASHUTOSH, amount: 19000 },
+      { from: RAJIV, to: ASHUTOSH, amount: 102768 },
     ]),
   JSON.stringify(directAfterPayment)
 );
+
+const directAfterRajivPaysEveryone = computeDirectTransfers(directSessions, [
+  { fromUser: RAJIV, toUser: ASHUTOSH, amount: 102768 },
+  { fromUser: RAJIV, toUser: BASTAV, amount: 19000 },
+]);
+check(
+  'paying each original payer keeps the remaining balance separate',
+  JSON.stringify(directAfterRajivPaysEveryone) === JSON.stringify([{ from: BASTAV, to: ASHUTOSH, amount: 19000 }]),
+  JSON.stringify(directAfterRajivPaysEveryone)
+);
+
+const directAfterEveryonePays = computeDirectTransfers(directSessions, [
+  { fromUser: RAJIV, toUser: ASHUTOSH, amount: 102768 },
+  { fromUser: RAJIV, toUser: BASTAV, amount: 19000 },
+  { fromUser: BASTAV, toUser: ASHUTOSH, amount: 19000 },
+]);
+check('direct payments fully settle the group', directAfterEveryonePays.length === 0, JSON.stringify(directAfterEveryonePays));
 
 // ── Resolver direct cases ────────────────────────────────────────────────────
 const { resolve } = createResolver({ members, payerId: RAJIV });

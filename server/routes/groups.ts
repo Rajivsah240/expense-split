@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import {
   balancesFromTotals,
   formatMoney,
-  minimalTransfers,
   netPairwiseTransfers,
   type PairwiseEntry,
   type Totals,
@@ -67,9 +66,9 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
           { $unwind: '$pairs' },
           { $group: { _id: '$pairs.k', value: { $sum: '$pairs.v' } } },
         ],
-        // Keep the original payer-to-owner relationship as well as the group
-        // totals. The minimum-payment plan below can legitimately route a
-        // payment through someone else, but this lets the UI show who paid.
+        // Keep the original payer-to-owner relationship. Settlement instructions
+        // stay between these two people; they are never routed through another
+        // group member.
         direct: [
           {
             $project: {
@@ -157,13 +156,14 @@ async function ledgerFor(groupId: string, memberIds: string[]) {
     toMap(settlementFacets?.received)
   );
 
+  const transfers = netPairwiseTransfers([
+    ...toPairwiseEntries(sessionFacets?.direct),
+    ...toPairwiseEntries(settlementFacets?.direct),
+  ]);
+
   return {
     balances,
-    directTransfers: netPairwiseTransfers([
-      ...toPairwiseEntries(sessionFacets?.direct),
-      ...toPairwiseEntries(settlementFacets?.direct),
-    ]),
-    transfers: minimalTransfers(balances),
+    transfers,
     totals: {
       groupTotal: totals.groupTotal ?? 0,
       monthTotal,
@@ -343,7 +343,6 @@ export const groupRoutes = [
       now,
       group: groupDto(group),
       balances: ledger.balances,
-      directTransfers: ledger.directTransfers,
       transfers: ledger.transfers,
       totals: ledger.totals,
       sessions: sessions.map(sessionDto),
@@ -467,6 +466,20 @@ export const groupRoutes = [
         balance.net > 0
           ? `${name} is still owed ${formatMoney(balance.net)}. Settle up first.`
           : `${name} still owes ${formatMoney(-balance.net)}. Settle up first.`
+      );
+    }
+
+    const directTransfer = ledger.transfers.find(
+      transfer => transfer.from === targetId || transfer.to === targetId
+    );
+    if (directTransfer) {
+      const name = memberName(group, targetId);
+      const otherId = directTransfer.from === targetId ? directTransfer.to : directTransfer.from;
+      throw badRequest(
+        `${name} still has a direct payment of ${formatMoney(directTransfer.amount)} with ${memberName(
+          group,
+          otherId
+        )}. Settle direct payments first.`
       );
     }
 

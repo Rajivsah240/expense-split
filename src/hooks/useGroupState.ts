@@ -31,7 +31,6 @@ const WATERMARK_SLACK_MS = 2500;
 export interface GroupData {
   group: Group | null;
   balances: MemberBalance[];
-  directTransfers: Transfer[];
   transfers: Transfer[];
   totals: GroupState['totals'];
   sessions: Session[];
@@ -54,7 +53,6 @@ const EMPTY_TOTALS: GroupState['totals'] = {
 const EMPTY: GroupData = {
   group: null,
   balances: [],
-  directTransfers: [],
   transfers: [],
   totals: EMPTY_TOTALS,
   sessions: [],
@@ -135,7 +133,6 @@ export function useGroupState(groupId: string | null) {
         return {
           group: state.group,
           balances: state.balances,
-          directTransfers: state.directTransfers ?? [],
           transfers: state.transfers,
           totals: state.totals,
           sessions: state.full ? [...sessions].sort(bySessionOrder) : sessions,
