@@ -12,6 +12,7 @@ import { formatMoneyShort } from '../lib/format';
 export function BarChart({ data, height = 132 }: { data: StatsBucket[]; height?: number }) {
   const max = Math.max(1, ...data.map(entry => entry.value));
   const hasValues = data.some(entry => entry.value > 0);
+  const labelEvery = data.length > 12 ? Math.ceil(data.length / 6) : 1;
 
   return (
     <div className="w-full">
@@ -39,12 +40,12 @@ export function BarChart({ data, height = 132 }: { data: StatsBucket[]; height?:
         })}
       </div>
       <div className="mt-1.5 flex gap-1.5">
-        {data.map(entry => (
+        {data.map((entry, index) => (
           <span
             key={entry.key}
             className="min-w-0 flex-1 truncate text-center text-[10px] font-semibold text-faint"
           >
-            {entry.label}
+            {index % labelEvery === 0 || index === data.length - 1 ? entry.label : ''}
           </span>
         ))}
       </div>
@@ -167,8 +168,8 @@ export function DonutChart({
   );
 }
 
-export function SplitBar({ shared, personal }: { shared: number; personal: number }) {
-  const total = shared + personal;
+export function SplitBar({ shared, singlePerson }: { shared: number; singlePerson: number }) {
+  const total = shared + singlePerson;
   if (total === 0) return <p className="py-3 text-center text-[13px] text-faint">Nothing yet</p>;
   const sharedPercent = Math.round((shared / total) * 100);
 
@@ -186,8 +187,8 @@ export function SplitBar({ shared, personal }: { shared: number; personal: numbe
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full bg-warn/70" aria-hidden />
-          <span className="font-semibold text-ink">Personal</span>
-          <span className="font-bold text-muted tnum">{formatMoneyShort(personal)}</span>
+          <span className="font-semibold text-ink">Single-person</span>
+          <span className="font-bold text-muted tnum">{formatMoneyShort(singlePerson)}</span>
         </span>
       </div>
     </div>

@@ -348,7 +348,12 @@ function MembersSheet({
       <div className="space-y-4">
         <ul className="card divide-y divide-line p-0">
           {group.members.map(member => {
-            const balance = state.balances.find(entry => entry.userId === member.userId);
+            const directTransfer = state.transfers.find(
+              transfer =>
+                (transfer.from === me.userId && transfer.to === member.userId) ||
+                (transfer.to === me.userId && transfer.from === member.userId)
+            );
+            const iPay = directTransfer?.from === me.userId;
             return (
               <li key={member.userId} className="flex items-center gap-3 px-3.5 py-3">
                 <Avatar name={member.displayName} userId={member.userId} size={36} />
@@ -360,15 +365,15 @@ function MembersSheet({
                   </p>
                   <p className="truncate text-[12px] text-muted">@{member.username}</p>
                 </div>
-                {balance && balance.net !== 0 && (
-                  <span
-                    className={`shrink-0 text-[12.5px] font-bold tnum ${
-                      balance.net > 0 ? 'text-positive' : 'text-negative'
-                    }`}
-                  >
-                    {balance.net > 0 ? '+' : '−'}
-                    {formatMoney(Math.abs(balance.net))}
-                  </span>
+                {member.userId !== me.userId && directTransfer && (
+                  <div className="shrink-0 text-right">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-faint">
+                      {iPay ? 'You pay' : 'They pay you'}
+                    </p>
+                    <p className={`text-[12.5px] font-bold tnum ${iPay ? 'text-negative' : 'text-positive'}`}>
+                      {formatMoney(directTransfer.amount)}
+                    </p>
+                  </div>
                 )}
                 {isOwner && member.userId !== me.userId && (
                   <IconButton
@@ -383,6 +388,9 @@ function MembersSheet({
             );
           })}
         </ul>
+        <p className="px-1 text-[12px] leading-relaxed text-faint">
+          Only direct payments between you and each member are shown. They are never combined through someone else.
+        </p>
 
         {isOwner ? (
           <div className="card-flat space-y-3 p-3.5">

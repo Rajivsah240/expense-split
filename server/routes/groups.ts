@@ -57,7 +57,8 @@ async function createUniqueInviteCode(): Promise<string> {
 /** Money totals straight from the database, so balances stay exact at any history size. */
 async function ledgerFor(groupId: string, memberIds: string[]) {
   const [sessionFacets] = await SessionModel.aggregate([
-    { $match: { groupId, deletedAt: null } },
+    // Private self-expenses never affect a shared group's ledger or totals.
+    { $match: { groupId, deletedAt: null, visibility: { $ne: 'private' } } },
     {
       $facet: {
         paid: [{ $group: { _id: '$paidBy', value: { $sum: '$total' } } }],
@@ -186,7 +187,7 @@ export const groupRoutes = [
     const groupIds = groups.map(group => group._id.toString());
     const rows = groupIds.length
       ? await SessionModel.aggregate([
-          { $match: { groupId: { $in: groupIds }, deletedAt: null } },
+          { $match: { groupId: { $in: groupIds }, deletedAt: null, visibility: { $ne: 'private' } } },
           {
             $group: {
               _id: '$groupId',
@@ -306,10 +307,11 @@ export const groupRoutes = [
     const since = Math.max(0, toNumber(ctx.query.since, 0));
     const full = since === 0;
     const now = Date.now();
+    const publicSessions = { groupId, deletedAt: null, visibility: { $ne: 'private' as const } };
 
     const sessionQuery = full
-      ? SessionModel.find({ groupId, deletedAt: null }).sort({ date: -1, createdAt: -1 }).limit(SNAPSHOT_SESSIONS)
-      : SessionModel.find({ groupId, deletedAt: null, updatedAt: { $gt: since } }).sort({ updatedAt: -1 }).limit(200);
+      ? SessionModel.find(publicSessions).sort({ date: -1, createdAt: -1 }).limit(SNAPSHOT_SESSIONS)
+      : SessionModel.find({ ...publicSessions, updatedAt: { $gt: since } }).sort({ updatedAt: -1 }).limit(200);
 
     const settlementQuery = full
       ? SettlementModel.find({ groupId, deletedAt: null }).sort({ createdAt: -1 }).limit(SNAPSHOT_SETTLEMENTS)
@@ -334,7 +336,11 @@ export const groupRoutes = [
         activityQuery,
         notificationQuery,
         NotificationModel.countDocuments({ userId, read: false }),
-        full ? [] : SessionModel.find({ groupId, deletedAt: { $gt: since } }).select('_id').limit(200),
+        full
+          ? []
+          : SessionModel.find({ groupId, deletedAt: { $gt: since }, visibility: { $ne: 'private' } })
+              .select('_id')
+              .limit(200),
         full ? [] : SettlementModel.find({ groupId, deletedAt: { $gt: since } }).select('_id').limit(200),
         ledgerFor(groupId, group.memberIds ?? []),
       ]);

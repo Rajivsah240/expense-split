@@ -1,30 +1,31 @@
 import { motion } from 'motion/react';
-import { ArrowRight, Check, HandCoins, Receipt, TrendingUp } from 'lucide-react';
-import type { Session } from '@shared/types';
-import { SessionCard } from '../components/SessionCard';
-import { Avatar, Button, EmptyState, SectionTitle } from '../components/ui';
+import { Check, HandCoins, Receipt, TrendingUp } from 'lucide-react';
+import { Avatar, Button } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import type { GroupStateApi } from '../hooks/useGroupState';
 
 interface HomeTabProps {
   state: GroupStateApi;
   currentUserId: string;
-  onOpenSession: (session: Session) => void;
   onSettle: () => void;
-  onAdd: () => void;
-  onSeeAll: () => void;
 }
 
-export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, onSeeAll }: HomeTabProps) {
-  const { balances, transfers, totals, sessions, nameOf } = state;
-  const mine = balances.find(entry => entry.userId === currentUserId);
-  const net = mine?.net ?? 0;
+export function HomeTab({ state, currentUserId, onSettle }: HomeTabProps) {
+  const { transfers, totals, nameOf } = state;
 
   // Every transfer stays between the person who owes and the person who paid.
   // The app never routes a payment through another flatmate.
   const myTransfers = transfers.filter(
     transfer => transfer.from === currentUserId || transfer.to === currentUserId
   );
+  const toPay = myTransfers
+    .filter(transfer => transfer.from === currentUserId)
+    .reduce((sum, transfer) => sum + transfer.amount, 0);
+  const toCollect = myTransfers
+    .filter(transfer => transfer.to === currentUserId)
+    .reduce((sum, transfer) => sum + transfer.amount, 0);
+  const headlineAmount = toPay || toCollect;
+  const headlineLabel = toPay > 0 ? 'You need to pay' : toCollect > 0 ? 'You need to collect' : 'Your balance';
 
   return (
     <div className="space-y-5">
@@ -36,29 +37,14 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
         className="card overflow-hidden p-0"
       >
         <div className="px-4 pb-4 pt-4">
-          <p className="text-[12.5px] font-bold uppercase tracking-[0.07em] text-faint">
-            {net > 0 ? 'You are owed in total' : net < 0 ? 'You owe in total' : 'Your balance'}
-          </p>
+          <p className="text-[12.5px] font-bold uppercase tracking-[0.07em] text-faint">{headlineLabel}</p>
           <p
             className={`mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tnum ${
-              net > 0 ? 'text-positive' : net < 0 ? 'text-negative' : 'text-ink'
+              toPay > 0 ? 'text-negative' : toCollect > 0 ? 'text-positive' : 'text-ink'
             }`}
           >
-            {formatMoney(Math.abs(net))}
+            {formatMoney(headlineAmount)}
           </p>
-
-          {/*
-            Every term that feeds the headline is listed, so the arithmetic can be
-            checked on screen: paid − share + paid-back − received = the number above.
-            Leaving the settlement terms out made correct balances look wrong.
-          */}
-          {mine && (mine.paid > 0 || mine.owed > 0) && (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-muted tnum">
-              You paid {formatMoney(mine.paid)} · your share {formatMoney(mine.owed)}
-              {mine.settledOut > 0 && ` · you paid back ${formatMoney(mine.settledOut)}`}
-              {mine.settledIn > 0 && ` · you received ${formatMoney(mine.settledIn)}`}
-            </p>
-          )}
         </div>
 
         {myTransfers.length > 0 ? (
@@ -124,46 +110,6 @@ export function HomeTab({ state, currentUserId, onOpenSession, onSettle, onAdd, 
         </section>
       )}
 
-      {/* Recent activity */}
-      <section>
-        <SectionTitle
-          action={
-            sessions.length > 0 ? (
-              <button
-                type="button"
-                onClick={onSeeAll}
-                className="flex items-center gap-0.5 text-[12.5px] font-bold text-brand"
-              >
-                See all
-                <ArrowRight className="size-3.5" />
-              </button>
-            ) : undefined
-          }
-        >
-          Recent
-        </SectionTitle>
-
-        {sessions.length === 0 ? (
-          <EmptyState
-            icon={<Receipt className="size-6" />}
-            title="No expenses yet"
-            body="Add the first one the way you'd write it in WhatsApp — the app works out everyone's share."
-            action={<Button onClick={onAdd}>Add an expense</Button>}
-          />
-        ) : (
-          <ul className="space-y-2.5">
-            {sessions.slice(0, 6).map(session => (
-              <li key={session.id}>
-                <SessionCard
-                  session={session}
-                  currentUserId={currentUserId}
-                  onOpen={onOpenSession}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

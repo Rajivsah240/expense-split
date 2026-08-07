@@ -11,7 +11,7 @@ import {
   route,
   toNumber,
 } from '../http.js';
-import { SessionModel, type SessionDoc } from '../models.js';
+import { SessionModel, type SessionDoc, type SessionItemDoc } from '../models.js';
 import {
   buildSession,
   diffSession,
@@ -53,13 +53,42 @@ function sessionSourceOf(value: unknown): SessionDoc['source'] {
   return value === 'text' || value === 'receipt' || value === 'whatsapp' ? value : 'manual';
 }
 
+function visibleSessionFilter(userId: string): Record<string, unknown> {
+  return {
+    $or: [
+      { visibility: { $ne: 'private' } },
+      { visibility: 'private', privateTo: userId },
+    ],
+  };
+}
+
+function isPrivateSelfExpense(items: SessionItemDoc[], userId: string): boolean {
+  return items.length > 0 && items.every(item => item.owners.length === 1 && item.owners[0] === userId);
+}
+
+/**
+ * New clients send a civil YYYY-MM-DD so a filter means the same date in every
+ * timezone. Keep epoch support for cached clients during the rollout.
+ */
+function historyDateOf(value: unknown): number {
+  const text = optionalString(value, 16);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return normalizeDate(text);
+  const timestamp = toNumber(value, 0);
+  return timestamp ? normalizeDate(timestamp) : 0;
+}
+
 export const sessionRoutes = [
   /** History + search. Filtering runs in the database so it stays fast over years of data. */
   route('GET', 'groups/:groupId/sessions', async ctx => {
     const group = await requireGroup(ctx.user, ctx.params.groupId);
     const groupId = group._id.toString();
+    const userId = ctx.user._id.toString();
 
-    const filter: Record<string, unknown> = { groupId, deletedAt: null };
+    const filter: Record<string, unknown> = {
+      groupId,
+      deletedAt: null,
+      $and: [visibleSessionFilter(userId)],
+    };
 
     const search = optionalString(ctx.query.q, 80);
     if (search) {
@@ -67,16 +96,21 @@ export const sessionRoutes = [
       const matchingMembers = group.members
         .filter(member => pattern.test(member.displayName) || pattern.test(member.username))
         .map(member => member.userId);
-      filter.$or = [
-        { searchText: pattern },
-        { paidByName: pattern },
-        ...(matchingMembers.length ? [{ paidBy: { $in: matchingMembers } }] : []),
-        ...(matchingMembers.length ? [{ 'items.owners': { $in: matchingMembers } }] : []),
+      filter.$and = [
+        ...((filter.$and as unknown[]) ?? []),
+        {
+          $or: [
+            { searchText: pattern },
+            { paidByName: pattern },
+            ...(matchingMembers.length ? [{ paidBy: { $in: matchingMembers } }] : []),
+            ...(matchingMembers.length ? [{ 'items.owners': { $in: matchingMembers } }] : []),
+          ],
+        },
       ];
     }
 
-    const from = toNumber(ctx.query.from, 0);
-    const to = toNumber(ctx.query.to, 0);
+    const from = historyDateOf(ctx.query.from);
+    const to = historyDateOf(ctx.query.to);
     if (from || to) {
       const range: Record<string, number> = {};
       if (from) range.$gte = normalizeDate(from) - 12 * 60 * 60 * 1000;
@@ -120,13 +154,21 @@ export const sessionRoutes = [
   route('POST', 'groups/:groupId/sessions', async ctx => {
     const group = await requireGroup(ctx.user, ctx.params.groupId);
     const actorId = ctx.user._id.toString();
+    const privateExpense = ctx.body.visibility === 'private';
 
-    const paidBy = String(ctx.body.paidBy ?? actorId);
+    const requestedPayer = String(ctx.body.paidBy ?? actorId);
+    if (privateExpense && requestedPayer !== actorId) {
+      throw badRequest('A private expense must be paid by you.');
+    }
+    const paidBy = privateExpense ? actorId : requestedPayer;
     if (!group.memberIds.includes(paidBy)) throw badRequest('The payer must be a member of this group.');
 
     const shop = optionalString(ctx.body.shop, 80);
     const notes = optionalString(ctx.body.notes, 500);
     const items = normalizeItems(ctx.body.items, group);
+    if (privateExpense && !isPrivateSelfExpense(items, actorId)) {
+      throw badRequest('A private expense can contain only items owned by you.');
+    }
     const { total, shares, searchText } = buildSession(items, shop, notes);
     const now = Date.now();
 
@@ -143,47 +185,57 @@ export const sessionRoutes = [
       total,
       shares,
       source: sessionSourceOf(ctx.body.source),
+      visibility: privateExpense ? 'private' : 'group',
+      privateTo: privateExpense ? actorId : null,
       searchText,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
     });
 
-    const where = shop ? ` at ${shop}` : '';
-    await recordActivity({
-      group,
-      actorId,
-      actorName: displayNameOf(ctx.user),
-      type: 'session.created',
-      summary: `${displayNameOf(ctx.user)} added ${items.length} item${items.length === 1 ? '' : 's'}${where} · ${formatMoney(total)}`,
-      changes: items.map(item => `${item.name} ${formatMoney(item.amount)}`),
-      targetId: doc._id.toString(),
-      amount: total,
-      notification: {
-        title: `${displayNameOf(ctx.user)} added ${formatMoney(total)}${where}`,
-        body: items
-          .slice(0, 4)
-          .map(item => item.name)
-          .join(', ') + (items.length > 4 ? ` +${items.length - 4} more` : ''),
-      },
-    });
+    if (!privateExpense) {
+      const where = shop ? ` at ${shop}` : '';
+      await recordActivity({
+        group,
+        actorId,
+        actorName: displayNameOf(ctx.user),
+        type: 'session.created',
+        summary: `${displayNameOf(ctx.user)} added ${items.length} item${items.length === 1 ? '' : 's'}${where} · ${formatMoney(total)}`,
+        changes: items.map(item => `${item.name} ${formatMoney(item.amount)}`),
+        targetId: doc._id.toString(),
+        amount: total,
+        notification: {
+          title: `${displayNameOf(ctx.user)} added ${formatMoney(total)}${where}`,
+          body: items
+            .slice(0, 4)
+            .map(item => item.name)
+            .join(', ') + (items.length > 4 ? ` +${items.length - 4} more` : ''),
+        },
+      });
+    }
 
     return created({ session: sessionDto(doc) });
   }),
 
   route('PATCH', 'groups/:groupId/sessions/:sessionId', async ctx => {
     const group = await requireGroup(ctx.user, ctx.params.groupId);
+    const actorId = ctx.user._id.toString();
     const doc = await SessionModel.findOne({
       _id: ctx.params.sessionId,
       groupId: group._id.toString(),
       deletedAt: null,
+      ...visibleSessionFilter(actorId),
     });
     if (!doc) throw notFound('That session no longer exists.');
 
     const before = doc.toObject() as SessionDoc;
-    const actorId = ctx.user._id.toString();
+    const privateExpense = doc.visibility === 'private';
+    if (ctx.body.visibility !== undefined && (ctx.body.visibility === 'private') !== privateExpense) {
+      throw badRequest('Create a new expense to change its privacy.');
+    }
 
     const paidBy = ctx.body.paidBy === undefined ? doc.paidBy : String(ctx.body.paidBy);
+    if (privateExpense && paidBy !== actorId) throw badRequest('A private expense must be paid by you.');
     if (!group.memberIds.includes(paidBy)) throw badRequest('The payer must be a member of this group.');
 
     const shop = ctx.body.shop === undefined ? doc.shop : optionalString(ctx.body.shop, 80);
@@ -195,6 +247,9 @@ export const sessionRoutes = [
     const items = ctx.body.items === undefined
       ? before.items
       : normalizeItems(ctx.body.items, group, historicOwners);
+    if (privateExpense && !isPrivateSelfExpense(items, actorId)) {
+      throw badRequest('A private expense can contain only items owned by you.');
+    }
 
     const { total, shares, searchText } = buildSession(items, shop, notes);
     const changes = diffSession(before, { date, shop, notes, paidBy, items }, userId => memberName(group, userId));
@@ -213,30 +268,34 @@ export const sessionRoutes = [
     doc.updatedAt = Date.now();
     await doc.save();
 
-    await recordActivity({
-      group,
-      actorId,
-      actorName: displayNameOf(ctx.user),
-      type: 'session.updated',
-      summary: `${displayNameOf(ctx.user)} edited a session${doc.shop ? ` at ${doc.shop}` : ''}`,
-      changes,
-      targetId: doc._id.toString(),
-      amount: total,
-      notification: {
-        title: `${displayNameOf(ctx.user)} edited a session`,
-        body: changes.slice(0, 3).join(' · '),
-      },
-    });
+    if (!privateExpense) {
+      await recordActivity({
+        group,
+        actorId,
+        actorName: displayNameOf(ctx.user),
+        type: 'session.updated',
+        summary: `${displayNameOf(ctx.user)} edited a session${doc.shop ? ` at ${doc.shop}` : ''}`,
+        changes,
+        targetId: doc._id.toString(),
+        amount: total,
+        notification: {
+          title: `${displayNameOf(ctx.user)} edited a session`,
+          body: changes.slice(0, 3).join(' · '),
+        },
+      });
+    }
 
     return ok({ session: sessionDto(doc) });
   }),
 
   route('DELETE', 'groups/:groupId/sessions/:sessionId', async ctx => {
     const group = await requireGroup(ctx.user, ctx.params.groupId);
+    const actorId = ctx.user._id.toString();
     const doc = await SessionModel.findOne({
       _id: ctx.params.sessionId,
       groupId: group._id.toString(),
       deletedAt: null,
+      ...visibleSessionFilter(actorId),
     });
     if (!doc) throw notFound('That session no longer exists.');
 
@@ -245,21 +304,23 @@ export const sessionRoutes = [
     doc.updatedAt = doc.deletedAt;
     await doc.save();
 
-    const where = doc.shop ? ` at ${doc.shop}` : '';
-    await recordActivity({
-      group,
-      actorId: ctx.user._id.toString(),
-      actorName: displayNameOf(ctx.user),
-      type: 'session.deleted',
-      summary: `${displayNameOf(ctx.user)} deleted a session${where} · ${formatMoney(doc.total)}`,
-      changes: doc.items.map(item => `${item.name} ${formatMoney(item.amount)}`),
-      targetId: doc._id.toString(),
-      amount: doc.total,
-      notification: {
-        title: `${displayNameOf(ctx.user)} deleted a session`,
-        body: `${formatMoney(doc.total)}${where} — balances updated.`,
-      },
-    });
+    if (doc.visibility !== 'private') {
+      const where = doc.shop ? ` at ${doc.shop}` : '';
+      await recordActivity({
+        group,
+        actorId,
+        actorName: displayNameOf(ctx.user),
+        type: 'session.deleted',
+        summary: `${displayNameOf(ctx.user)} deleted a session${where} · ${formatMoney(doc.total)}`,
+        changes: doc.items.map(item => `${item.name} ${formatMoney(item.amount)}`),
+        targetId: doc._id.toString(),
+        amount: doc.total,
+        notification: {
+          title: `${displayNameOf(ctx.user)} deleted a session`,
+          body: `${formatMoney(doc.total)}${where} — balances updated.`,
+        },
+      });
+    }
 
     return ok({ deleted: true, id: doc._id.toString() });
   }),

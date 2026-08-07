@@ -15,6 +15,7 @@ import {
   Camera,
   Image as ImageIcon,
   Keyboard,
+  Lock,
   MessageSquareText,
   ScanLine,
   Sparkles,
@@ -80,6 +81,11 @@ export function AddSheet({
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(toDateInput(Date.now()));
   const [usedAi, setUsedAi] = useState(false);
+  const [visibility, setVisibility] = useState<'group' | 'private'>('group');
+  const privateMembers = useMemo(
+    () => members.filter(member => member.userId === currentUserId),
+    [members, currentUserId]
+  );
 
   const reset = () => {
     setMode('paste');
@@ -94,6 +100,7 @@ export function AddSheet({
     setNotes('');
     setDate(toDateInput(Date.now()));
     setUsedAi(false);
+    setVisibility('group');
   };
 
   useEffect(() => {
@@ -207,6 +214,21 @@ export function AddSheet({
 
   const validity = useMemo(() => validateDraft(items), [items]);
 
+  const changeVisibility = (next: 'group' | 'private') => {
+    setVisibility(next);
+    if (next === 'private') {
+      setItems(current =>
+        current.map(item => ({
+          ...item,
+          owners: [currentUserId],
+          assumed: false,
+          needsOwners: false,
+          reason: '',
+        }))
+      );
+    }
+  };
+
   const save = async () => {
     setBusy(true);
     setError('');
@@ -229,11 +251,17 @@ export function AddSheet({
           paidBy: currentUserId,
           items: payload,
           source: mode === 'manual' ? 'manual' : mode === 'photo' ? 'receipt' : 'text',
+          visibility,
         },
       });
 
       onSaved(result.session);
-      toast(`Saved ${payload.length} item${payload.length === 1 ? '' : 's'}.`, 'success');
+      toast(
+        visibility === 'private'
+          ? 'Saved privately. Only you can see it.'
+          : `Saved ${payload.length} item${payload.length === 1 ? '' : 's'}.`,
+        'success'
+      );
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save this.');
@@ -257,7 +285,7 @@ export function AddSheet({
           disabled={!validity.canSave}
           onClick={() => void save()}
         >
-          {validity.blocking > 0 ? 'Assign owners to save' : 'Save to ledger'}
+          {validity.blocking > 0 ? 'Assign owners to save' : visibility === 'private' ? 'Save privately' : 'Save to group'}
         </Button>
       </div>
     ) : mode === 'paste' ? (
@@ -450,7 +478,45 @@ export function AddSheet({
             )}
 
 
-            <DraftEditor items={items} members={members} onChange={setItems} />
+            <section className="space-y-2">
+              <p className="px-0.5 text-[13px] font-semibold text-ink">Who can see this?</p>
+              <div className="inset flex gap-1 p-1" role="tablist" aria-label="Expense visibility">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={visibility === 'group'}
+                  onClick={() => changeVisibility('group')}
+                  className={`flex min-h-12 flex-1 items-center justify-center rounded-[10px] px-2 text-[12.5px] font-semibold transition-all ${
+                    visibility === 'group' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  Share with group
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={visibility === 'private'}
+                  onClick={() => changeVisibility('private')}
+                  className={`flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-[10px] px-2 text-[12.5px] font-semibold transition-all ${
+                    visibility === 'private' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <Lock className="size-3.5" />
+                  Private to me
+                </button>
+              </div>
+              {visibility === 'private' && (
+                <p className="rounded-xl border border-brand-line bg-brand-soft px-3 py-2.5 text-[12px] leading-relaxed text-brand-dark">
+                  Only you can see this in History and Insights. It will not affect group totals, balances, or anyone else’s history.
+                </p>
+              )}
+            </section>
+
+            <DraftEditor
+              items={items}
+              members={visibility === 'private' && privateMembers.length ? privateMembers : members}
+              onChange={setItems}
+            />
 
             <PayerAndDate payerName={myName} date={date} onDate={setDate} />
 

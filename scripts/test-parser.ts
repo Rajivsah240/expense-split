@@ -14,6 +14,7 @@ import {
   sumValues,
 } from '../shared/money.js';
 import type { ParserMember } from '../shared/parser.js';
+import { dateKeyOf, resolveStatsRange, statsTimelineKeys } from '../server/time.js';
 
 const RAJIV = 'u_rajiv';
 const ASHUTOSH = 'u_ashutosh';
@@ -280,6 +281,29 @@ for (const [token, expected] of resolverCases) {
   const result = resolve(token);
   check(`resolve "${token}"`, result.ok && same(result.owners, expected), `${JSON.stringify(result)}`);
 }
+
+// Calendar ranges must operate on civil dates, not browser/server timestamps.
+const leapDay = resolveStatsRange('day', '2024-02-29');
+check('custom day keeps the selected calendar date', leapDay.from === '2024-02-29' && leapDay.to === '2024-02-29');
+
+const selectedWeek = resolveStatsRange('week', '2026-08-06');
+check('custom week starts on Monday', selectedWeek.from === '2026-08-03' && selectedWeek.to === '2026-08-09');
+check('custom week gets seven daily buckets', statsTimelineKeys(selectedWeek).length === 7);
+
+const selectedMonth = resolveStatsRange('month', '2024-02');
+check('custom month includes leap day', selectedMonth.from === '2024-02-01' && selectedMonth.to === '2024-02-29');
+check('custom month is charted by day', selectedMonth.bucket === 'day' && statsTimelineKeys(selectedMonth).length === 29);
+
+const selectedYear = resolveStatsRange('year', '2024');
+check('custom year covers the full year', selectedYear.from === '2024-01-01' && selectedYear.to === '2024-12-31');
+check('custom year is charted by month', selectedYear.bucket === 'month' && statsTimelineKeys(selectedYear).length === 12);
+
+const fixedNow = Date.UTC(2026, 7, 6, 12, 0, 0);
+const invalidMonth = resolveStatsRange('month', '2026-99', fixedNow);
+check(
+  'invalid calendar input falls back safely',
+  invalidMonth.from === `${dateKeyOf(fixedNow).slice(0, 7)}-01`
+);
 
 // ── Report ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed\n`);

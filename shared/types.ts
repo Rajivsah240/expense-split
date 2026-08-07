@@ -110,6 +110,9 @@ export interface Session {
   /** userId -> total owed across all items in this session. Sums to `total`. */
   shares: Record<string, Paise>;
   source: SessionSource;
+  /** Private sessions are visible only to `privateTo`; legacy sessions are group-visible. */
+  visibility: 'group' | 'private';
+  privateTo: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -217,14 +220,15 @@ export interface StatsBucket {
 }
 
 export interface GroupStats {
-  monthly: StatsBucket[];
+  scope: 'mine' | 'group';
+  range: { kind: string; from: string; to: string; label: string };
+  total: Paise;
+  timeline: StatsBucket[];
   byMember: StatsBucket[];
   byCategory: StatsBucket[];
-  personalByMember: StatsBucket[];
   topItems: { name: string; count: number; total: Paise }[];
-  sharedVsPersonal: { shared: Paise; personal: Paise };
-  contributionByMember: { userId: string; monthly: StatsBucket[] }[];
-  frequency: { sessionsPerWeek: number; activeDays: number; busiestWeekday: string };
+  sharedVsSinglePerson: { shared: Paise; singlePerson: Paise };
+  frequency: { entryCount: number; activeDays: number; busiestWeekday: string };
 }
 
 /** A row in the review table shown before anything is written. */

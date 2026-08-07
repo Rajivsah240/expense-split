@@ -194,6 +194,12 @@ export function useGroupState(groupId: string | null) {
 
   /** Apply a server response straight away, then let the next poll reconcile. */
   const applySession = useCallback((session: Session) => {
+    // Private expenses intentionally never enter group state. Bump the revision
+    // so the owner's History/Insights refetches without exposing it on Home.
+    if (session.visibility === 'private') {
+      setRevision(current => current + 1);
+      return;
+    }
     setData(previous => ({
       ...previous,
       sessions: mergeById(previous.sessions, [session], [], bySessionOrder),

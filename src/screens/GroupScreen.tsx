@@ -171,10 +171,7 @@ export function GroupScreen({
               <HomeTab
                 state={state}
                 currentUserId={me.userId}
-                onOpenSession={setOpenSession}
                 onSettle={() => setSettling(true)}
-                onAdd={() => setAdding(true)}
-                onSeeAll={() => setTab('history')}
               />
             )}
             {tab === 'history' && (
@@ -186,9 +183,7 @@ export function GroupScreen({
                 onOpenSession={setOpenSession}
               />
             )}
-            {tab === 'stats' && (
-              <StatsTab groupId={groupId} members={state.members} revision={state.revision} />
-            )}
+            {tab === 'stats' && <StatsTab groupId={groupId} revision={state.revision} />}
             {tab === 'more' && (
               <MoreTab
                 me={me}

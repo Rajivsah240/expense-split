@@ -23,7 +23,8 @@ import {
 } from '../server/models.js';
 import { formatMoney } from '../shared/money.js';
 import { parseExpenseText } from '../shared/parser.js';
-import type { GroupState, MemberBalance, Session } from '../shared/types.js';
+import type { GroupState, GroupStats, MemberBalance, Session } from '../shared/types.js';
+import { dateKeyOf } from '../server/time.js';
 
 const BASE = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
 const SUFFIX = Math.random().toString(36).slice(2, 8);
@@ -183,8 +184,10 @@ Rice 300 all`,
   check('parser found the shop', parsed.shop === 'Reliance Fresh', parsed.shop);
   check('parser is confident', parsed.confidence >= 0.85, String(parsed.confidence));
 
+  const smokeDate = dateKeyOf();
+
   const savedSession = await call<{ session: Session }>(rajiv.token, 'POST', `groups/${groupId}/sessions`, {
-    date: new Date().toISOString().slice(0, 10),
+    date: smokeDate,
     shop: parsed.shop,
     notes: 'Weekly groceries',
     paidBy: rajiv.userId,
@@ -211,7 +214,7 @@ Rice 300 all`,
 
   // Second payer, so balances are non-trivial.
   const second = await call<{ session: Session }>(ashutosh.token, 'POST', `groups/${groupId}/sessions`, {
-    date: new Date().toISOString().slice(0, 10),
+    date: smokeDate,
     shop: 'Corner shop',
     paidBy: ashutosh.userId,
     source: 'manual',
@@ -406,6 +409,14 @@ Rice 300 all`,
   );
   check('filter by date range', byDate.data.sessions.length === 2, String(byDate.data.sessions.length));
 
+  const civilDate = smokeDate;
+  const byCivilDate = await call<{ sessions: Session[] }>(
+    rajiv.token,
+    'GET',
+    `groups/${groupId}/sessions?from=${civilDate}&to=${civilDate}`
+  );
+  check('civil date filters work without browser timezone conversion', byCivilDate.data.sessions.length === 2, String(byCivilDate.data.sessions.length));
+
   const noMatch = await call<{ sessions: Session[] }>(
     rajiv.token,
     'GET',
@@ -414,23 +425,103 @@ Rice 300 all`,
   check('search with no matches is empty', noMatch.data.sessions.length === 0);
 
   console.log('\n── Insights ──');
-  const stats = await call<{
-    monthly: { value: number }[];
-    byCategory: { key: string }[];
-    topItems: unknown[];
-    sharedVsPersonal: { shared: number; personal: number };
-    frequency: { sessionsPerWeek: number };
-  }>(rajiv.token, 'GET', `groups/${groupId}/stats?months=6`);
-  check('stats respond', stats.status === 200);
-  check('monthly series is padded to 6 buckets', stats.data.monthly.length === 6, String(stats.data.monthly.length));
-  check('current month has spending', stats.data.monthly[5].value > 0, String(stats.data.monthly[5].value));
+  const stateBeforePrivate = await call<GroupState>(rajiv.token, 'GET', `groups/${groupId}/state?since=0`);
+  const otherStateBeforePrivate = await call<GroupState>(ashutosh.token, 'GET', `groups/${groupId}/state?since=0`);
+  const privateExpense = await call<{ session: Session }>(rajiv.token, 'POST', `groups/${groupId}/sessions`, {
+    date: civilDate,
+    shop: 'Private smoke lunch',
+    paidBy: rajiv.userId,
+    source: 'manual',
+    visibility: 'private',
+    items: [
+      { name: 'Private smoke lunch', amount: 12345, owners: [rajiv.userId], category: 'Dining' },
+    ],
+  });
+  check(
+    'owner can save a private self-expense',
+    privateExpense.status === 201 && privateExpense.data.session.visibility === 'private',
+    JSON.stringify(privateExpense.data).slice(0, 180)
+  );
+
+  const privateWrongPayer = await call(rajiv.token, 'POST', `groups/${groupId}/sessions`, {
+    paidBy: ashutosh.userId,
+    visibility: 'private',
+    items: [{ name: 'Forged private payer', amount: 100, owners: [rajiv.userId], category: 'Miscellaneous' }],
+  });
+  check('private expense rejects another payer', privateWrongPayer.status === 400, String(privateWrongPayer.status));
+
+  const privateWrongOwner = await call(rajiv.token, 'POST', `groups/${groupId}/sessions`, {
+    paidBy: rajiv.userId,
+    visibility: 'private',
+    items: [{ name: 'Forged private owner', amount: 100, owners: [ashutosh.userId], category: 'Miscellaneous' }],
+  });
+  check('private expense rejects another owner', privateWrongOwner.status === 400, String(privateWrongOwner.status));
+
+  const ownerPrivateHistory = await call<{ sessions: Session[] }>(
+    rajiv.token,
+    'GET',
+    `groups/${groupId}/sessions?q=private%20smoke`
+  );
+  check('private expense appears in its owner history', ownerPrivateHistory.data.sessions.length === 1);
+
+  const otherPrivateHistory = await call<{ sessions: Session[] }>(
+    ashutosh.token,
+    'GET',
+    `groups/${groupId}/sessions?q=private%20smoke`
+  );
+  check('private expense never appears in another member history', otherPrivateHistory.data.sessions.length === 0);
+
+  const privateEditByOther = await call(
+    ashutosh.token,
+    'PATCH',
+    `groups/${groupId}/sessions/${privateExpense.data.session.id}`,
+    { notes: 'not allowed' }
+  );
+  check('another member cannot open or edit a private expense', privateEditByOther.status === 404, String(privateEditByOther.status));
+
+  const stateAfterPrivate = await call<GroupState>(rajiv.token, 'GET', `groups/${groupId}/state?since=0`);
+  const otherStateAfterPrivate = await call<GroupState>(ashutosh.token, 'GET', `groups/${groupId}/state?since=0`);
+  check(
+    'private expense is excluded from group state and totals',
+    stateAfterPrivate.data.sessions.length === stateBeforePrivate.data.sessions.length &&
+      stateAfterPrivate.data.totals.groupTotal === stateBeforePrivate.data.totals.groupTotal &&
+      JSON.stringify(stateAfterPrivate.data.balances) === JSON.stringify(stateBeforePrivate.data.balances)
+  );
+  check(
+    'private expense does not create activity or notifications for others',
+    !stateAfterPrivate.data.activities.some(entry => entry.targetId === privateExpense.data.session.id) &&
+      otherStateAfterPrivate.data.unreadCount === otherStateBeforePrivate.data.unreadCount
+  );
+
+  const stats = await call<GroupStats>(rajiv.token, 'GET', `groups/${groupId}/stats?scope=group&period=this-month`);
+  check('group stats respond', stats.status === 200 && stats.data.scope === 'group');
+  check('selected-range timeline is returned', stats.data.timeline.length > 0, String(stats.data.timeline.length));
+  check('group stats exclude private expenses', stats.data.total === stateBeforePrivate.data.totals.groupTotal, String(stats.data.total));
   check('categories are aggregated', stats.data.byCategory.length >= 4, String(stats.data.byCategory.length));
   check('top items ranked', stats.data.topItems.length > 0);
   check(
-    'shared vs personal both present',
-    stats.data.sharedVsPersonal.shared > 0 && stats.data.sharedVsPersonal.personal > 0,
-    JSON.stringify(stats.data.sharedVsPersonal)
+    'shared vs single-person items are both present',
+    stats.data.sharedVsSinglePerson.shared > 0 && stats.data.sharedVsSinglePerson.singlePerson > 0,
+    JSON.stringify(stats.data.sharedVsSinglePerson)
   );
+
+  const mineStats = await call<GroupStats>(rajiv.token, 'GET', `groups/${groupId}/stats?scope=mine&period=this-month`);
+  const publicRajivShare = stateAfterPrivate.data.sessions.reduce(
+    (sum, entry) => sum + (entry.shares[rajiv.userId] ?? 0),
+    0
+  );
+  check(
+    'my stats use exact shares plus my private expenses',
+    mineStats.status === 200 && mineStats.data.total === publicRajivShare + privateExpense.data.session.total,
+    String(mineStats.data.total)
+  );
+
+  const oneDayStats = await call<GroupStats>(
+    rajiv.token,
+    'GET',
+    `groups/${groupId}/stats?scope=mine&period=day&date=${civilDate}`
+  );
+  check('custom calendar day stats work', oneDayStats.status === 200 && oneDayStats.data.range.kind === 'day');
 
   console.log('\n── Notifications ──');
   const notifications = await call<{ notifications: { id: string }[]; unreadCount: number }>(

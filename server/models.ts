@@ -71,6 +71,8 @@ export interface SessionDoc {
   total: Paise;
   shares: Record<string, Paise>;
   source: SessionSource;
+  visibility: 'group' | 'private';
+  privateTo: string | null;
   /** Lowercased item names + shop + notes, for fast substring search. */
   searchText: string;
   createdAt: number;
@@ -213,6 +215,8 @@ const sessionSchema = new Schema<SessionDoc>(
     total: { type: Number, required: true },
     shares: { type: Schema.Types.Mixed, default: () => ({}) },
     source: { type: String, enum: ['manual', 'text', 'receipt', 'whatsapp'], default: 'manual' },
+    visibility: { type: String, enum: ['group', 'private'], default: 'group' },
+    privateTo: { type: String, default: null },
     searchText: { type: String, default: '' },
     createdAt: { type: Number, default: () => Date.now() },
     updatedAt: { type: Number, default: () => Date.now() },
@@ -225,6 +229,7 @@ const sessionSchema = new Schema<SessionDoc>(
 sessionSchema.index({ groupId: 1, updatedAt: -1 });
 sessionSchema.index({ groupId: 1, date: -1, createdAt: -1 });
 sessionSchema.index({ groupId: 1, deletedAt: 1, date: -1 });
+sessionSchema.index({ groupId: 1, visibility: 1, privateTo: 1, deletedAt: 1, date: -1, createdAt: -1 });
 
 const settlementSchema = new Schema<SettlementDoc>(
   {

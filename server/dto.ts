@@ -61,6 +61,8 @@ export function sessionDto(doc: SessionDoc): Session {
     total: doc.total,
     shares: doc.shares ?? {},
     source: doc.source || 'manual',
+    visibility: doc.visibility === 'private' ? 'private' : 'group',
+    privateTo: doc.visibility === 'private' ? doc.privateTo ?? doc.createdBy : null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };

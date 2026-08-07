@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Lock } from 'lucide-react';
 import { CATEGORY_EMOJI } from '@shared/categories';
 import type { Session } from '@shared/types';
 import { formatMoney } from '../lib/format';
@@ -33,13 +33,23 @@ export function SessionCard({
           <span className="clip text-[14.5px] font-bold leading-tight text-ink">
             {session.shop || `${session.items.length} item${session.items.length === 1 ? '' : 's'}`}
           </span>
+          {session.visibility === 'private' && <Lock className="size-3.5 shrink-0 text-brand" aria-label="Private expense" />}
         </span>
         <span className="clip mt-0.5 block truncate text-[12.5px] text-muted">{preview}</span>
         <span className="mt-1.5 flex items-center gap-1.5">
-          <Avatar name={session.paidByName || 'Member'} userId={session.paidBy} size={18} />
-          <span className="text-[11.5px] font-medium text-faint">
-            {paidByMe ? 'You paid' : `${session.paidByName || 'Member'} paid`}
-          </span>
+          {session.visibility === 'private' ? (
+            <>
+              <Lock className="size-[15px] text-brand" />
+              <span className="text-[11.5px] font-medium text-brand-dark">Private expense</span>
+            </>
+          ) : (
+            <>
+              <Avatar name={session.paidByName || 'Member'} userId={session.paidBy} size={18} />
+              <span className="text-[11.5px] font-medium text-faint">
+                {paidByMe ? 'You paid' : `${session.paidByName || 'Member'} paid`}
+              </span>
+            </>
+          )}
         </span>
       </span>
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Receipt, Sparkles, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Receipt, Sparkles, Trash2 } from 'lucide-react';
 import { CATEGORY_EMOJI } from '@shared/categories';
 import { parseAmount } from '@shared/money';
 import type { DraftItem, Group, Member, Session } from '@shared/types';
@@ -70,6 +70,9 @@ export function SessionSheet({
 
   const validity = useMemo(() => validateDraft(items), [items]);
   const myShare = session ? session.shares[currentUserId] ?? 0 : 0;
+  const editorMembers = session?.visibility === 'private'
+    ? members.filter(member => member.userId === currentUserId)
+    : members;
 
   const save = async () => {
     if (!session) return;
@@ -105,9 +108,14 @@ export function SessionSheet({
     if (!session) return;
     const confirmed = await confirm({
       title: 'Delete this session?',
-      body: `${formatMoney(session.total)} across ${session.items.length} item${
-        session.items.length === 1 ? '' : 's'
-      } will be removed and everyone's balance will change. This is recorded in the activity log.`,
+      body:
+        session.visibility === 'private'
+          ? `${formatMoney(session.total)} across ${session.items.length} item${
+              session.items.length === 1 ? '' : 's'
+            } will be removed from only your private expense record.`
+          : `${formatMoney(session.total)} across ${session.items.length} item${
+              session.items.length === 1 ? '' : 's'
+            } will be removed and everyone's balance will change. This is recorded in the activity log.`,
       confirmLabel: 'Delete',
       tone: 'danger',
     });
@@ -172,7 +180,13 @@ export function SessionSheet({
     >
       {!session ? null : editing ? (
         <div className="space-y-4">
-          <DraftEditor items={items} members={members} onChange={setItems} />
+          {session.visibility === 'private' && (
+            <p className="flex items-start gap-2 rounded-xl border border-brand-line bg-brand-soft px-3 py-2.5 text-[12px] leading-relaxed text-brand-dark">
+              <Lock className="mt-px size-4 shrink-0" />
+              This is private to you. Its payer and item owners stay set to you, and it never affects group balances.
+            </p>
+          )}
+          <DraftEditor items={items} members={editorMembers} onChange={setItems} />
           <PayerAndDate payerName={session.paidByName || 'Member'} date={date} onDate={setDate} />
           <Field label="Shop">
             <input
@@ -202,7 +216,9 @@ export function SessionSheet({
             <Avatar name={session.paidByName || 'Member'} userId={session.paidBy} size={38} />
             <div className="min-w-0 flex-1">
               <p className="text-[13.5px] font-bold text-ink">
-                {session.paidByName || 'Member'} paid {formatMoney(session.total)}
+                {session.visibility === 'private'
+                  ? `Private expense · ${formatMoney(session.total)}`
+                  : `${session.paidByName || 'Member'} paid ${formatMoney(session.total)}`}
               </p>
               <p className="text-[12px] text-muted">
                 {SOURCE_LABEL[session.source]} · added {formatRelative(session.createdAt)}
@@ -211,6 +227,12 @@ export function SessionSheet({
                   : ''}
               </p>
             </div>
+            {session.visibility === 'private' && (
+              <Tag tone="brand">
+                <Lock className="size-3" />
+                Private
+              </Tag>
+            )}
             {session.source !== 'manual' && (
               <Tag tone="brand">
                 <Sparkles className="size-3" />
@@ -253,24 +275,31 @@ export function SessionSheet({
             </div>
           )}
 
-          <div>
-            <p className="mb-2 px-1 text-[11.5px] font-bold uppercase tracking-[0.07em] text-faint">
-              Split across members
-            </p>
-            <ul className="space-y-1.5">
-              {members
-                .filter(member => (session.shares[member.userId] ?? 0) > 0)
-                .map(member => (
-                  <li key={member.userId} className="flex items-center gap-2.5 px-1">
-                    <Avatar name={member.displayName} userId={member.userId} size={26} />
-                    <span className="clip flex-1 text-[13px] font-medium text-ink">{member.displayName}</span>
-                    <span className="text-[13px] font-bold text-muted tnum">
-                      {formatMoney(session.shares[member.userId] ?? 0)}
-                    </span>
-                  </li>
-                ))}
-            </ul>
-          </div>
+          {session.visibility === 'private' ? (
+            <div className="flex items-center gap-2.5 rounded-xl bg-brand-soft px-3.5 py-3 text-[12.5px] font-medium text-brand-dark">
+              <Lock className="size-4 shrink-0" />
+              Only you can see this expense. It is not shared with the group.
+            </div>
+          ) : (
+            <div>
+              <p className="mb-2 px-1 text-[11.5px] font-bold uppercase tracking-[0.07em] text-faint">
+                Split across members
+              </p>
+              <ul className="space-y-1.5">
+                {members
+                  .filter(member => (session.shares[member.userId] ?? 0) > 0)
+                  .map(member => (
+                    <li key={member.userId} className="flex items-center gap-2.5 px-1">
+                      <Avatar name={member.displayName} userId={member.userId} size={26} />
+                      <span className="clip flex-1 text-[13px] font-medium text-ink">{member.displayName}</span>
+                      <span className="text-[13px] font-bold text-muted tnum">
+                        {formatMoney(session.shares[member.userId] ?? 0)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
 
           {error && <ErrorNote>{error}</ErrorNote>}
         </div>
