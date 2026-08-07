@@ -8,6 +8,7 @@
 
 import { DEFAULT_NOTIFICATION_PREFS, type ActivityType, type Paise } from '../shared/types.js';
 import { ActivityModel, NotificationModel, User, type GroupDoc } from './models.js';
+import { sendPushNotifications } from './push.js';
 
 const PREF_FOR_TYPE: Record<ActivityType, keyof typeof DEFAULT_NOTIFICATION_PREFS> = {
   'group.created': 'memberChanged',
@@ -81,5 +82,8 @@ export async function recordActivity(input: RecordActivityInput): Promise<void> 
       createdAt,
     }));
 
-  if (documents.length) await NotificationModel.insertMany(documents, { ordered: false });
+  if (documents.length) {
+    const notifications = await NotificationModel.insertMany(documents, { ordered: false });
+    await sendPushNotifications(notifications);
+  }
 }

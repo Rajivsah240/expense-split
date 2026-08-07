@@ -12,6 +12,7 @@ import {
   Group,
   NotificationModel,
   Otp,
+  PushSubscriptionModel,
   SessionModel,
   SettlementModel,
   User,
@@ -26,6 +27,7 @@ const models = [
   ['settlements', SettlementModel],
   ['activities', ActivityModel],
   ['notifications', NotificationModel],
+  ['push subscriptions', PushSubscriptionModel],
 ] as const;
 
 await connectToDatabase();

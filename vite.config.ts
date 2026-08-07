@@ -67,6 +67,9 @@ export default defineConfig({
       },
 
       workbox: {
+        // Keep Workbox's generated caching worker while extending it with the
+        // Web Push and notification-click handlers in public/push-sw.js.
+        importScripts: ['/push-sw.js'],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,

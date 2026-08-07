@@ -121,6 +121,19 @@ export interface NotificationDoc {
   createdAt: number;
 }
 
+export interface PushSubscriptionDoc {
+  _id: mongoose.Types.ObjectId;
+  userId: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  expirationTime: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface OtpDoc {
   _id: mongoose.Types.ObjectId;
   email: string;
@@ -286,6 +299,30 @@ const notificationSchema = new Schema<NotificationDoc>(
 notificationSchema.index({ userId: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, read: 1 });
 
+const pushSubscriptionKeysSchema = new Schema<PushSubscriptionDoc['keys']>(
+  {
+    p256dh: { type: String, required: true, maxlength: 256 },
+    auth: { type: String, required: true, maxlength: 128 },
+  },
+  { _id: false }
+);
+
+const pushSubscriptionSchema = new Schema<PushSubscriptionDoc>(
+  {
+    userId: { type: String, required: true },
+    // The endpoint and keys are bearer capabilities. They are never returned
+    // by a read API or written to logs.
+    endpoint: { type: String, required: true, unique: true, maxlength: 2048 },
+    keys: { type: pushSubscriptionKeysSchema, required: true },
+    expirationTime: { type: Number, default: null },
+    createdAt: { type: Number, default: () => Date.now() },
+    updatedAt: { type: Number, default: () => Date.now() },
+  },
+  { versionKey: false }
+);
+
+pushSubscriptionSchema.index({ userId: 1, updatedAt: -1 });
+
 const registry = mongoose.models as Record<string, Model<any>>;
 
 export const User = (registry.User || mongoose.model<UserDoc>('User', userSchema)) as Model<UserDoc>;
@@ -299,6 +336,8 @@ export const ActivityModel = (registry.Activity ||
   mongoose.model<ActivityDoc>('Activity', activitySchema)) as Model<ActivityDoc>;
 export const NotificationModel = (registry.Notification ||
   mongoose.model<NotificationDoc>('Notification', notificationSchema)) as Model<NotificationDoc>;
+export const PushSubscriptionModel = (registry.PushSubscription ||
+  mongoose.model<PushSubscriptionDoc>('PushSubscription', pushSubscriptionSchema)) as Model<PushSubscriptionDoc>;
 
 /** Live documents (with .save(), .toObject()) as opposed to the plain shapes above. */
 export type GroupDocument = HydratedDocument<GroupDoc>;

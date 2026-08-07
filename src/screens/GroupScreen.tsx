@@ -6,7 +6,7 @@
  * app — the five things you do live under your thumb.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BarChart3,
@@ -54,6 +54,9 @@ interface GroupScreenProps {
   /** Set by the manifest shortcut (?action=add) to open the add flow on launch. */
   initialAction?: 'add' | 'balances' | null;
   onActionHandled: () => void;
+  /** Set when the app was opened by tapping a native notification. */
+  initialNotificationId?: string | null;
+  onNotificationHandled: () => void;
 }
 
 export function GroupScreen({
@@ -65,6 +68,8 @@ export function GroupScreen({
   onSignOut,
   initialAction,
   onActionHandled,
+  initialNotificationId,
+  onNotificationHandled,
 }: GroupScreenProps) {
   const state = useGroupState(groupId);
   const [tab, setTab] = useState<Tab>('home');
@@ -73,6 +78,7 @@ export function GroupScreen({
   const [settling, setSettling] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [openSession, setOpenSession] = useState<Session | null>(null);
+  const markingNotification = useRef<string | null>(null);
 
   useEffect(() => {
     if (!initialAction || !state.group) return;
@@ -80,6 +86,17 @@ export function GroupScreen({
     if (initialAction === 'balances') setSettling(true);
     onActionHandled();
   }, [initialAction, state.group, onActionHandled]);
+
+  useEffect(() => {
+    if (!initialNotificationId || !state.group || markingNotification.current === initialNotificationId) return;
+    markingNotification.current = initialNotificationId;
+    void state
+      .markNotificationsRead([initialNotificationId])
+      .then(onNotificationHandled)
+      .catch(() => {
+        markingNotification.current = null;
+      });
+  }, [initialNotificationId, state.group, state.markNotificationsRead, onNotificationHandled]);
 
   // Keep the open session sheet in step with incoming sync updates.
   useEffect(() => {

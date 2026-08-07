@@ -38,7 +38,15 @@ async function start() {
   });
 
   if (isProduction) {
-    const distDir = path.join(rootDir, 'dist');
+    // In the bundled build this file already lives inside dist/. Keep the same
+    // entry point working when run unbundled with --production as well.
+    const distDir = path.basename(rootDir) === 'dist' ? rootDir : path.join(rootDir, 'dist');
+    // Service-worker imports participate in update checks. Never let the
+    // year-long immutable asset policy pin an old push handler.
+    app.get(['/sw.js', '/push-sw.js', '/manifest.webmanifest'], (req, res) => {
+      res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+      res.sendFile(path.join(distDir, req.path.slice(1)));
+    });
     app.use(express.static(distDir, { index: false, maxAge: '1y' }));
     app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
   } else {

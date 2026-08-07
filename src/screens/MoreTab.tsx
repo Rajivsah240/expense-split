@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AtSign,
   Bell,
+  BellRing,
   ChevronRight,
   Copy,
   Download,
@@ -18,6 +19,12 @@ import type { Activity, Group, Me, Member, NotificationPrefs } from '@shared/typ
 import { api } from '../lib/api';
 import { formatMoney, formatRelative } from '../lib/format';
 import { isIos, useInstallPrompt } from '../lib/pwa';
+import {
+  disableMobilePush,
+  enableMobilePush,
+  loadMobilePushState,
+  type MobilePushState,
+} from '../lib/push';
 import { ErrorNote } from '../components/AddSheet';
 import { ProfileSheet } from '../components/ProfileSheet';
 import {
@@ -444,9 +451,32 @@ function PrefsSheet({
   const toast = useToast();
   const [prefs, setPrefs] = useState(me.notificationPrefs);
   const [busy, setBusy] = useState(false);
+  const [mobile, setMobile] = useState<MobilePushState | null>(null);
+  const [mobileBusy, setMobileBusy] = useState(false);
+  const [mobileError, setMobileError] = useState('');
 
   useEffect(() => {
-    if (open) setPrefs(me.notificationPrefs);
+    if (!open) return;
+    setPrefs(me.notificationPrefs);
+    setMobileBusy(true);
+    setMobileError('');
+    let cancelled = false;
+    void loadMobilePushState()
+      .then(state => {
+        if (!cancelled) setMobile(state);
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setMobile(null);
+          setMobileError(error instanceof Error ? error.message : 'Could not check this device.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMobileBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, me.notificationPrefs]);
 
   const toggle = async (key: keyof NotificationPrefs) => {
@@ -463,6 +493,50 @@ function PrefsSheet({
     }
   };
 
+  const toggleMobile = async () => {
+    setMobileBusy(true);
+    setMobileError('');
+    try {
+      if (mobile?.subscribed) {
+        await disableMobilePush();
+        toast('Mobile notifications turned off on this device.', 'success');
+      } else {
+        await enableMobilePush();
+        toast('Mobile notifications enabled on this device.', 'success');
+      }
+      setMobile(await loadMobilePushState());
+    } catch (error) {
+      setMobileError(error instanceof Error ? error.message : 'Could not update mobile notifications.');
+      try {
+        setMobile(await loadMobilePushState());
+      } catch {
+        /* Keep the actionable error from the original attempt. */
+      }
+    } finally {
+      setMobileBusy(false);
+    }
+  };
+
+  const mobileHint = (() => {
+    if (mobileError) return mobileError;
+    if (mobileBusy && !mobile) return 'Checking this device...';
+    if (mobile?.issue === 'ios-install-required') {
+      return 'On iPhone or iPad, add the app to your Home Screen first, then open it from the icon.';
+    }
+    if (mobile?.issue === 'insecure') return 'Open the deployed HTTPS app to enable phone notifications.';
+    if (mobile?.issue === 'unsupported') return 'This browser does not support mobile notifications.';
+    if (mobile?.issue === 'server-unconfigured') return 'Mobile delivery has not been configured on the server yet.';
+    if (mobile?.permission === 'denied') return 'Blocked in your browser or phone notification settings.';
+    if (mobile?.subscribed) return "Alerts appear in this device's notification tray, even when the app is closed.";
+    return "Show selected alerts in this device's notification tray.";
+  })();
+
+  const mobileDisabled =
+    mobileBusy ||
+    !mobile ||
+    Boolean(mobile.issue) ||
+    mobile.permission === 'denied';
+
   return (
     <Sheet
       open={open}
@@ -470,6 +544,37 @@ function PrefsSheet({
       title="Notifications"
       subtitle="Choose what you want to hear about."
     >
+      <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">On this device</p>
+      <div className="card mb-4 flex items-center gap-3 p-3.5">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+          <BellRing className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-ink">Mobile notification bar</p>
+          <p className={`text-[12px] leading-snug ${mobileError ? 'text-negative' : 'text-muted'}`}>
+            {mobileHint}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={Boolean(mobile?.subscribed)}
+          aria-label="Mobile notification bar"
+          disabled={mobileDisabled}
+          onClick={() => void toggleMobile()}
+          className={`relative h-[28px] w-[48px] shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+            mobile?.subscribed ? 'bg-brand' : 'bg-surface-3'
+          }`}
+        >
+          <span
+            className={`absolute top-[3px] size-[22px] rounded-full bg-white shadow-sm transition-all ${
+              mobile?.subscribed ? 'left-[23px]' : 'left-[3px]'
+            }`}
+          />
+        </button>
+      </div>
+
+      <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">Alert types</p>
       <ul className="card divide-y divide-line p-0">
         {PREF_LABELS.map(pref => (
           <li key={pref.key} className="flex items-center gap-3 px-3.5 py-3">
@@ -498,7 +603,8 @@ function PrefsSheet({
         ))}
       </ul>
       <p className="mt-3 px-1 text-[12px] leading-relaxed text-faint">
-        Notifications appear in the app's bell. Nothing is emailed or pushed to your lock screen.
+        These choices control both the in-app bell and mobile alerts. Mobile alerts must be enabled on each
+        device separately.
       </p>
     </Sheet>
   );

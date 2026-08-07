@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Me, NotificationPrefs } from '@shared/types';
-import { api, clearToken, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
+import {
+  api,
+  clearPrivateApiCache,
+  clearToken,
+  getToken,
+  setToken,
+  setUnauthorizedHandler,
+} from '../lib/api';
+import { unsubscribeMobilePushLocally } from '../lib/push';
 
 export interface AuthState {
   me: Me | null;
@@ -13,12 +21,17 @@ export function useAuth() {
 
   const signOut = useCallback(() => {
     clearToken();
+    void clearPrivateApiCache();
     setMe(null);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setMe(null));
+    setUnauthorizedHandler(() => {
+      setMe(null);
+      void clearPrivateApiCache();
+      void unsubscribeMobilePushLocally();
+    });
   }, []);
 
   useEffect(() => {
@@ -32,7 +45,11 @@ export function useAuth() {
         if (!cancelled) setMe(result.user);
       })
       .catch(() => {
-        if (!cancelled) clearToken();
+        if (!cancelled) {
+          clearToken();
+          void clearPrivateApiCache();
+          void unsubscribeMobilePushLocally();
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -51,6 +68,7 @@ export function useAuth() {
       method: 'POST',
       body: { email, code },
     });
+    await clearPrivateApiCache();
     setToken(result.token);
     setMe(result.user);
     return result.user;

@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'expense_split_token';
+const PRIVATE_API_CACHE = 'api-reads';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -30,6 +31,12 @@ export const clearToken = () => {
     /* ignore */
   }
 };
+
+/** Prevent an offline response cached for one account leaking into the next. */
+export async function clearPrivateApiCache(): Promise<void> {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  await window.caches.delete(PRIVATE_API_CACHE);
+}
 
 type Query = Record<string, string | number | undefined | null>;
 

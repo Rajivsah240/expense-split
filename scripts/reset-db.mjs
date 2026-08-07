@@ -11,7 +11,16 @@ import dns from 'dns';
 import mongoose from 'mongoose';
 import readline from 'readline';
 
-const COLLECTIONS = ['users', 'otps', 'groups', 'sessions', 'settlements', 'activities', 'notifications'];
+const COLLECTIONS = [
+  'users',
+  'otps',
+  'groups',
+  'sessions',
+  'settlements',
+  'activities',
+  'notifications',
+  'pushsubscriptions',
+];
 const LEGACY = ['teams', 'expenses'];
 
 if (!process.env.VERCEL) {

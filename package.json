@@ -9,7 +9,8 @@
     "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.mjs",
     "start": "node dist/server.mjs --production",
     "icons": "node scripts/gen-icons.mjs",
-    "test": "tsx scripts/test-parser.ts",
+    "push:keys": "web-push generate-vapid-keys",
+    "test": "tsx scripts/test-parser.ts && tsx scripts/test-push.ts",
     "lint": "tsc --noEmit",
     "db:reset": "node --env-file=.env scripts/reset-db.mjs",
     "db:indexes": "tsx --env-file=.env scripts/sync-indexes.ts",
@@ -28,7 +29,8 @@
     "motion": "^12.23.24",
     "nodemailer": "^9.0.3",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "react-dom": "^19.0.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -38,6 +40,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/web-push": "^3.6.4",
     "@vercel/node": "^5.9.3",
     "@vitejs/plugin-react": "^5.0.4",
     "esbuild": "^0.25.0",

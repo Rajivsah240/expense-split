@@ -48,7 +48,7 @@ honest choice rather than a WebSocket that would silently degrade.
 ## Running it
 
 **Prerequisites:** Node 20+, a MongoDB Atlas cluster, a Gmail app password, a
-Gemini API key.
+Gemini API key, and a VAPID key pair for mobile push notifications.
 
 ```bash
 npm install
@@ -69,10 +69,11 @@ Install-to-home-screen needs HTTPS, so that part only works on the deployed URL
 | `npm run build` | Icons → client bundle → bundled server |
 | `npm start` | Serve the production build |
 | `npm run lint` | `tsc --noEmit` over client, server and shared code |
-| `npm test` | 251 parser + money assertions, no network needed |
+| `npm test` | Parser, money, push-security, and service-worker checks; no network needed |
 | `npm run smoke` | 69 end-to-end API checks against a running dev server |
 | `npm run smoke:ai` | Live Gemini checks: messy text, receipt photo, chat import |
 | `npm run icons` | Regenerate the PWA icon set |
+| `npm run push:keys` | Generate the VAPID public/private key pair for Web Push |
 | `npm run seed:demo` | Populate a demo group; `-- --clean` removes it |
 | `npm run db:reset` | Drop every collection (asks for confirmation) |
 | `npm run db:indexes` | Create every declared index |
@@ -89,7 +90,8 @@ Push the repo and set these environment variables in the project settings:
 
 `MONGODB_URI`, `MONGODB_DB_NAME`, `JWT_SECRET`, `SMTP_USER`, `SMTP_PASS`,
 `SMTP_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `GEMINI_API_KEY`,
-`GEMINI_MODEL`, `STATS_TIMEZONE`.
+`GEMINI_MODEL`, `STATS_TIMEZONE`, `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`.
 
 [vercel.json](vercel.json) routes every `/api/*` request into the single function
 at [api/index.ts](api/index.ts) and serves the SPA for everything else. Allow the
@@ -137,7 +139,16 @@ The manifest declares real icons, `display: standalone`, portrait orientation,
 theme colour and app shortcuts. (The previous build declared no icons at all,
 which is why the install prompt never appeared.) The service worker precaches the
 app shell, serves API reads `NetworkFirst` so the last known balances stay
-readable offline, caches fonts, and updates itself in the background.
+readable offline, caches fonts, updates itself in the background, and displays
+Web Push messages in the phone's notification tray.
+
+Run `npm run push:keys` once, place the three `VAPID_*` values from
+[.env.example](.env.example) in the server environment, then open **More ->
+Notification preferences** and enable **Mobile notification bar** on each phone.
+Android browsers support this over HTTPS. On iPhone and iPad (iOS/iPadOS 16.4+),
+first add the app to the Home Screen and launch it from that icon; Apple exposes
+Web Push only to installed Home Screen web apps. The permission prompt appears
+only after the user turns the switch on.
 
 ---
 

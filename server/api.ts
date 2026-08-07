@@ -11,6 +11,7 @@ import { groupRoutes } from './routes/groups.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settlementRoutes } from './routes/settlements.js';
 import { feedRoutes } from './routes/feed.js';
+import { pushRoutes } from './routes/push.js';
 import { statsRoutes } from './routes/stats.js';
 import { aiRoutes } from './routes/ai.js';
 import type { UserDoc } from './models.js';
@@ -18,6 +19,7 @@ import type { UserDoc } from './models.js';
 const routes: Route[] = [
   ...authRoutes,
   ...feedRoutes,
+  ...pushRoutes,
   ...groupRoutes,
   ...sessionRoutes,
   ...settlementRoutes,
